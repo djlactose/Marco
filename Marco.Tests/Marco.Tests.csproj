@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Marco.Core\Marco.Core.csproj" />
+    <ProjectReference Include="..\Marco.Discovery\Marco.Discovery.csproj" />
+    <ProjectReference Include="..\Marco.Inventory\Marco.Inventory.csproj" />
+    <ProjectReference Include="..\Marco.Credentials\Marco.Credentials.csproj" />
+    <ProjectReference Include="..\Marco.Export\Marco.Export.csproj" />
+  </ItemGroup>
+
+</Project>

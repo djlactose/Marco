@@ -1,0 +1,58 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Marco.Core", "Marco.Core\Marco.Core.csproj", "{31A81BA8-B582-4342-8172-BF974E18407C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Marco.Discovery", "Marco.Discovery\Marco.Discovery.csproj", "{91BAADAD-F46D-4D53-A824-09F0B0AD5153}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Marco.Tests", "Marco.Tests\Marco.Tests.csproj", "{CCC4DACE-38C8-4F18-B2C5-9794D5D0FDF6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Marco.App", "Marco.App\Marco.App.csproj", "{F8FACA09-1F67-4A7B-909D-7D98EB647443}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Marco.Inventory", "Marco.Inventory\Marco.Inventory.csproj", "{849BF7B4-D08A-4DF2-A904-ABBE75794237}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Marco.Credentials", "Marco.Credentials\Marco.Credentials.csproj", "{6004C072-9533-4006-B7B0-016750F77E2F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Marco.Export", "Marco.Export\Marco.Export.csproj", "{87752DBC-9CFE-45C4-8AC1-D99236CFD212}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{31A81BA8-B582-4342-8172-BF974E18407C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{31A81BA8-B582-4342-8172-BF974E18407C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{31A81BA8-B582-4342-8172-BF974E18407C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{31A81BA8-B582-4342-8172-BF974E18407C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{91BAADAD-F46D-4D53-A824-09F0B0AD5153}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{91BAADAD-F46D-4D53-A824-09F0B0AD5153}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{91BAADAD-F46D-4D53-A824-09F0B0AD5153}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{91BAADAD-F46D-4D53-A824-09F0B0AD5153}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CCC4DACE-38C8-4F18-B2C5-9794D5D0FDF6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CCC4DACE-38C8-4F18-B2C5-9794D5D0FDF6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CCC4DACE-38C8-4F18-B2C5-9794D5D0FDF6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CCC4DACE-38C8-4F18-B2C5-9794D5D0FDF6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F8FACA09-1F67-4A7B-909D-7D98EB647443}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F8FACA09-1F67-4A7B-909D-7D98EB647443}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F8FACA09-1F67-4A7B-909D-7D98EB647443}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F8FACA09-1F67-4A7B-909D-7D98EB647443}.Release|Any CPU.Build.0 = Release|Any CPU
+		{849BF7B4-D08A-4DF2-A904-ABBE75794237}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{849BF7B4-D08A-4DF2-A904-ABBE75794237}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{849BF7B4-D08A-4DF2-A904-ABBE75794237}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{849BF7B4-D08A-4DF2-A904-ABBE75794237}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6004C072-9533-4006-B7B0-016750F77E2F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6004C072-9533-4006-B7B0-016750F77E2F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6004C072-9533-4006-B7B0-016750F77E2F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6004C072-9533-4006-B7B0-016750F77E2F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{87752DBC-9CFE-45C4-8AC1-D99236CFD212}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{87752DBC-9CFE-45C4-8AC1-D99236CFD212}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{87752DBC-9CFE-45C4-8AC1-D99236CFD212}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{87752DBC-9CFE-45C4-8AC1-D99236CFD212}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

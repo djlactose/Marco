@@ -1,0 +1,38 @@
+## .NET / Visual Studio
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+publish/
+artifacts/
+
+## Rider
+.idea/
+
+## Build output
+*.dll
+*.pdb
+!oui.tsv
+
+## NuGet
+*.nupkg
+packages/
+.nuget/
+
+## Test results
+[Tt]est[Rr]esults/
+*.trx
+*.coverage
+
+## Marco runtime data (portable store)
+Marco.Data/
+*.marco.json

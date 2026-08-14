@@ -1,0 +1,203 @@
+# Marco curated OUI table.  Columns: PREFIX<TAB>VENDOR<TAB>CATEGORY
+# PREFIX = first 24 bits of the MAC as 6 hex digits (separators optional/ignored).
+# CATEGORY = Printer | Network | Pc | Nic | Hypervisor | None
+# Category drives device classification; vendor is display-only.
+# This is a curated subset, not the full IEEE registry. Regenerate/extend via build/refresh-oui.ps1.
+#
+# --- Hypervisors / virtual NICs ---
+005056	VMware	Hypervisor
+000C29	VMware	Hypervisor
+000569	VMware	Hypervisor
+001C14	VMware	Hypervisor
+00155D	Microsoft Hyper-V	Hypervisor
+0003FF	Microsoft Virtual PC	Hypervisor
+080027	Oracle VirtualBox	Hypervisor
+0A0027	Oracle VirtualBox	Hypervisor
+00163E	Xen	Hypervisor
+001C42	Parallels	Hypervisor
+525400	QEMU/KVM	Hypervisor
+00505C	VMware	Hypervisor
+#
+# --- Printer vendors (dedicated) ---
+0000AA	Xerox	Printer
+000420	Xerox	Printer
+9C934E	Xerox	Printer
+0000A0	Sanyo	Printer
+08003E	Canon	Printer
+001E8F	Canon	Printer
+002678	Canon	Printer
+88872E	Canon	Printer
+D4A147	Ricoh	Printer
+002673	Ricoh	Printer
+00265E	Ricoh	Printer
+0080A3	Lantronix	Printer
+0080D5	Brother	Printer
+008077	Brother	Printer
+30055C	Brother	Printer
+485A3F	Brother	Printer
+0000B0	Lexmark	Printer
+002500	Lexmark	Printer
+E80462	Lexmark	Printer
+000074	Kyocera	Printer
+001D72	Kyocera	Printer
+00C0EE	Kyocera	Printer
+0000F4	Konica Minolta	Printer
+002165	Konica Minolta	Printer
+40B89A	Konica Minolta	Printer
+00008F	Seiko Epson	Printer
+000048	Seiko Epson	Printer
+64EB8C	Seiko Epson	Printer
+A4EE57	Seiko Epson	Printer
+0007E9	Zebra Technologies	Printer
+00234D	Zebra Technologies	Printer
+2C6FC9	Zebra Technologies	Printer
+485B39	Zebra Technologies	Printer
+#
+# --- Network gear (switches/routers/APs/firewalls) ---
+00000C	Cisco	Network
+000142	Cisco	Network
+000143	Cisco	Network
+000163	Cisco	Network
+0001C7	Cisco	Network
+000A41	Cisco	Network
+001B0C	Cisco	Network
+001120	Cisco	Network
+0025B4	Cisco	Network
+00259C	Cisco Linksys	Network
+E0CB4E	Cisco Meraki	Network
+00180A	Cisco Meraki	Network
+88155A	Cisco Meraki	Network
+002722	Ubiquiti	Network
+0418D6	Ubiquiti	Network
+24A43C	Ubiquiti	Network
+44D9E7	Ubiquiti	Network
+68D79A	Ubiquiti	Network
+788A20	Ubiquiti	Network
+802AA8	Ubiquiti	Network
+DC9FDB	Ubiquiti	Network
+FCECDA	Ubiquiti	Network
+74ACB9	Ubiquiti	Network
+000B86	Aruba Networks	Network
+001A1E	Aruba Networks	Network
+6CF37F	Aruba Networks	Network
+9C1C12	Aruba Networks	Network
+24DEC6	Aruba Networks	Network
+000FB5	Netgear	Network
+00095B	Netgear	Network
+001B2F	Netgear	Network
+00223F	Netgear	Network
+20E52A	Netgear	Network
+2C3033	Netgear	Network
+30469A	Netgear	Network
+A00460	Netgear	Network
+C03F0E	Netgear	Network
+E091F5	Netgear	Network
+000C42	MikroTik	Network
+4C5E0C	MikroTik	Network
+6C3B6B	MikroTik	Network
+CC2DE0	MikroTik	Network
+D4CA6D	MikroTik	Network
+E48D8C	MikroTik	Network
+744D28	MikroTik	Network
+000944	Fortinet	Network
+088080	Fortinet	Network
+906CAC	Fortinet	Network
+704CA5	Fortinet	Network
+000585	Juniper Networks	Network
+001584	Juniper Networks	Network
+002688	Juniper Networks	Network
+5C4527	Juniper Networks	Network
+84B59C	Juniper Networks	Network
+88A25E	Juniper Networks	Network
+000AEB	TP-Link	Network
+001478	TP-Link	Network
+14CC20	TP-Link	Network
+30B5C2	TP-Link	Network
+50C7BF	TP-Link	Network
+60E327	TP-Link	Network
+A42BB0	TP-Link	Network
+EC086B	TP-Link	Network
+F4F26D	TP-Link	Network
+001195	D-Link	Network
+00179A	D-Link	Network
+001CF0	D-Link	Network
+1CBDB9	D-Link	Network
+340804	D-Link	Network
+78542E	D-Link	Network
+9094E4	D-Link	Network
+C8D3A3	D-Link	Network
+001B17	Palo Alto Networks	Network
+D4F4BE	Palo Alto Networks	Network
+0006B1	SonicWall	Network
+C0EAE4	SonicWall	Network
+18B169	SonicWall	Network
+00907F	WatchGuard	Network
+00908F	AudioCodes	Network
+#
+# --- PC / server OEMs ---
+000874	Dell	Pc
+000BDB	Dell	Pc
+000D56	Dell	Pc
+001143	Dell	Pc
+0015C5	Dell	Pc
+00219B	Dell	Pc
+0024E8	Dell	Pc
+14FEB5	Dell	Pc
+18A99B	Dell	Pc
+5CF9DD	Dell	Pc
+B8CA3A	Dell	Pc
+D067E5	Dell	Pc
+F8BC12	Dell	Pc
+F8DB88	Dell	Pc
+847BEB	Dell	Pc
+1866DA	Dell	Pc
+0021CC	Lenovo	Pc
+60D9C7	Lenovo	Pc
+8C1645	Lenovo	Pc
+C85B76	Lenovo	Pc
+E86A64	Lenovo	Pc
+3C970E	Lenovo	Pc
+000255	IBM	Pc
+0004AC	IBM	Pc
+00096B	IBM	Pc
+001125	IBM	Pc
+002590	Supermicro	Pc
+003048	Supermicro	Pc
+0CC47A	Supermicro	Pc
+3CECEF	Supermicro	Pc
+AC1F6B	Supermicro	Pc
+7CC255	Supermicro	Pc
+D05099	Supermicro	Pc
+001BFC	ASUSTek	Pc
+08606E	ASUSTek	Pc
+1C872C	ASUSTek	Pc
+2C56DC	ASUSTek	Pc
+50465D	ASUSTek	Pc
+AC220B	ASUSTek	Pc
+001517	Intel	Pc
+001B21	Intel	Nic
+001E67	Intel	Nic
+0022FB	Intel	Nic
+0024D7	Intel	Nic
+3CFDFE	Intel	Nic
+A0369F	Intel	Nic
+6805CA	Intel	Nic
+000E0C	Intel	Nic
+00E04C	Realtek	Nic
+001018	Broadcom	Nic
+001BE9	Broadcom	Nic
+D40129	Broadcom	Nic
+#
+# --- Apple (client devices) ---
+001451	Apple	Pc
+0017F2	Apple	Pc
+003065	Apple	Pc
+3C0754	Apple	Pc
+A4C361	Apple	Pc
+F0189E	Apple	Pc
+#
+# --- Microsoft Surface / client ---
+281878	Microsoft	Pc
+7C1E52	Microsoft	Pc
+C49DED	Microsoft	Pc
+501AC5	Microsoft	Pc

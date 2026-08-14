@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Marco.App</RootNamespace>
+    <AssemblyName>Marco</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Single-file publish is driven from build/publish.ps1; keep the csproj build clean. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Marco.Core\Marco.Core.csproj" />
+    <ProjectReference Include="..\Marco.Discovery\Marco.Discovery.csproj" />
+    <ProjectReference Include="..\Marco.Inventory\Marco.Inventory.csproj" />
+    <ProjectReference Include="..\Marco.Credentials\Marco.Credentials.csproj" />
+    <ProjectReference Include="..\Marco.Export\Marco.Export.csproj" />
+  </ItemGroup>
+
+</Project>
