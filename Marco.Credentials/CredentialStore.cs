@@ -41,6 +41,18 @@ public sealed class CredentialStore : IDisposable
         }
     }
 
+    /// <summary>Swap an edited set in place, keeping its try-order position; the old set is disposed.</summary>
+    public void Replace(CredentialSet existing, CredentialSet replacement)
+    {
+        lock (_lock)
+        {
+            var index = _sets.IndexOf(existing);
+            if (index < 0) { _sets.Add(replacement); return; }
+            _sets[index] = replacement;
+            existing.Dispose();
+        }
+    }
+
     public void Clear()
     {
         lock (_lock)

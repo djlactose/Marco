@@ -1,3 +1,4 @@
+using System.Security;
 using System.Windows;
 using System.Windows.Media;
 using Marco.Core.Inventory;
@@ -8,22 +9,40 @@ namespace Marco.App.Views;
 public partial class CredentialDialog : Window
 {
     private readonly CredentialVerifier? _verifier;
+    private readonly CredentialSet? _editing;
 
     public CredentialSet? Result { get; private set; }
 
     private string? _verifiedSignature;
+    private string? _emptyPasswordWarnedSignature;
 
-    public CredentialDialog(CredentialVerifier? verifier = null, string? defaultHost = null)
+    public CredentialDialog(CredentialVerifier? verifier = null, string? defaultHost = null,
+        CredentialKind defaultKind = CredentialKind.Windows, CredentialSet? editing = null)
     {
         InitializeComponent();
         _verifier = verifier;
+        _editing = editing;
         if (!string.IsNullOrWhiteSpace(defaultHost)) TestHostBox.Text = defaultHost;
         SetupCommands.Text = TargetEnablementScript;
+        if (editing is not null) LoadFrom(editing);
+        else if (defaultKind == CredentialKind.Linux) LinuxModeRadio.IsChecked = true;
         ApplyMode();
         Loaded += (_, _) => LabelBox.Focus();
     }
 
     public CredentialDialog() : this(null, null) { }
+
+    private void LoadFrom(CredentialSet set)
+    {
+        Title = "Edit credential";
+        OkButton.Content = "Save";
+        if (set.Kind == CredentialKind.Linux) LinuxModeRadio.IsChecked = true;
+        LabelBox.Text = set.Label;
+        DomainBox.Text = set.Domain ?? "";
+        UserBox.Text = set.Username ?? "";
+        PortBox.Text = set.SshPort.ToString();
+        if (set.Password is { Length: > 0 }) PasswordKeepHint.Visibility = Visibility.Visible;
+    }
 
     private bool IsLinux => LinuxModeRadio.IsChecked == true;
 
@@ -47,6 +66,7 @@ public partial class CredentialDialog : Window
         PresetHint.Visibility = Visibility.Collapsed;
         ResultText.Visibility = Visibility.Collapsed;
         _verifiedSignature = null;
+        _emptyPasswordWarnedSignature = null;
     }
 
     // --- credential build ---
@@ -56,11 +76,15 @@ public partial class CredentialDialog : Window
         var user = UserBox.Text.Trim();
         if (IsLinux)
         {
-            var label = string.IsNullOrWhiteSpace(LabelBox.Text) ? $"{user} (Linux)" : LabelBox.Text.Trim();
-            return new CredentialSet(label, null, user, PasswordBoxCtrl.SecurePassword)
+            var port = TryGetPort(out var p) ? p : 22;
+            // The list pill already says SSH, so the auto-label is just the user (plus port when non-default).
+            var label = string.IsNullOrWhiteSpace(LabelBox.Text)
+                ? (port == 22 ? user : $"{user}:{port}")
+                : LabelBox.Text.Trim();
+            return new CredentialSet(label, null, user, ResolvePassword())
             {
                 Kind = CredentialKind.Linux,
-                SshPort = int.TryParse(PortBox.Text, out var p) && p > 0 ? p : 22,
+                SshPort = port,
             };
         }
         else
@@ -70,21 +94,44 @@ public partial class CredentialDialog : Window
                 : LabelBox.Text.Trim();
             return new CredentialSet(label,
                 string.IsNullOrWhiteSpace(DomainBox.Text) ? null : DomainBox.Text.Trim(),
-                user, PasswordBoxCtrl.SecurePassword)
+                user, ResolvePassword())
             { Kind = CredentialKind.Windows };
         }
     }
 
-    private string Signature()
-        => $"{IsLinux}|{DomainBox.Text}|{UserBox.Text}|{PasswordBoxCtrl.SecurePassword.Length}|{TestHostBox.Text}|{PortBox.Text}";
+    /// <summary>The typed password, or (when editing with the box left blank) a copy of the existing one.</summary>
+    private SecureString ResolvePassword()
+    {
+        var typed = PasswordBoxCtrl.SecurePassword;
+        if (typed.Length > 0 || _editing?.Password is not { Length: > 0 }) return typed;
+        typed.Dispose();
+        return _editing.Password.Copy();
+    }
 
-    private int Port() => int.TryParse(PortBox.Text, out var p) && p > 0 ? p : 22;
+    private int TypedPasswordLength()
+    {
+        using var s = PasswordBoxCtrl.SecurePassword;
+        return s.Length;
+    }
+
+    private string Signature()
+        => $"{IsLinux}|{DomainBox.Text}|{UserBox.Text}|{TypedPasswordLength()}|{TestHostBox.Text}|{PortBox.Text}";
+
+    /// <summary>Valid port (or default 22 when blank / Windows mode); false when the text is not a usable port.</summary>
+    private bool TryGetPort(out int port)
+    {
+        port = 22;
+        var text = PortBox.Text.Trim();
+        if (!IsLinux || text.Length == 0) return true;
+        return int.TryParse(text, out port) && port is >= 1 and <= 65535;
+    }
 
     // --- verify ---
 
     private async void OnTest(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(UserBox.Text)) { ShowResult(VerifyOutcome.Error, "Enter a username first.", null); return; }
+        if (!TryGetPort(out _)) { ShowResult(VerifyOutcome.Error, "SSH port must be a whole number from 1 to 65535.", null); return; }
         var host = TestHostBox.Text.Trim();
         using var set = BuildSet();
 
@@ -108,7 +155,7 @@ public partial class CredentialDialog : Window
         if (IsLinux)
         {
             if (string.IsNullOrWhiteSpace(host)) return new VerifyResult(VerifyOutcome.Error, "Enter a host to test SSH against.");
-            return await _verifier.VerifyLinuxHostAsync(set, host, Port(), cts.Token);
+            return await _verifier.VerifyLinuxHostAsync(set, host, set.SshPort, cts.Token);
         }
 
         // Windows: real WMI test against a host, else a target-less LogonUser check.
@@ -126,7 +173,26 @@ public partial class CredentialDialog : Window
     {
         if (string.IsNullOrWhiteSpace(UserBox.Text))
         {
-            MessageBox.Show("A username is required.", "Add credential", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShowResult(VerifyOutcome.Error, "A username is required.", null);
+            UserBox.Focus();
+            return;
+        }
+        if (!TryGetPort(out _))
+        {
+            ShowResult(VerifyOutcome.Error, "SSH port must be a whole number from 1 to 65535.", null);
+            PortBox.Focus();
+            return;
+        }
+
+        // A blank password is almost always a mistake — warn once inline, proceed on the second click.
+        // (When editing, blank means "keep the current password", which needs no warning.)
+        var typedLen = TypedPasswordLength();
+        var keepingExisting = typedLen == 0 && _editing?.Password is { Length: > 0 };
+        if (typedLen == 0 && !keepingExisting && _emptyPasswordWarnedSignature != Signature())
+        {
+            _emptyPasswordWarnedSignature = Signature();
+            ShowWarning($"Password is empty — it will be used as a blank password. Click {OkButton.Content} again to confirm.");
+            PasswordBoxCtrl.Focus();
             return;
         }
 
@@ -195,6 +261,13 @@ public partial class CredentialDialog : Window
     {
         try { Clipboard.SetText(TargetEnablementScript); CopyHint.Text = "Copied."; }
         catch { CopyHint.Text = "Couldn't access the clipboard."; }
+    }
+
+    private void ShowWarning(string message)
+    {
+        ResultText.Visibility = Visibility.Visible;
+        ResultText.Text = message;
+        ResultText.Foreground = Brushes.DarkGoldenrod;
     }
 
     private void ShowResult(VerifyOutcome outcome, string message, string? hint, bool neutral = false)

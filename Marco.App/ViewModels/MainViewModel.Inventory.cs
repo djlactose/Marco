@@ -15,12 +15,16 @@ public sealed class CredentialDisplay
 {
     public string Label { get; }
     public string KindTag { get; }
+    public string Details { get; }
     public CredentialSet Set { get; }
     public CredentialDisplay(CredentialSet set)
     {
         Set = set;
         Label = set.Label;
         KindTag = set.Kind switch { CredentialKind.Linux => "SSH", CredentialKind.Windows => "WMI", _ => "" };
+        Details = set.Kind == CredentialKind.Linux
+            ? $"SSH · {set.Username}" + (set.SshPort == 22 ? "" : $" · port {set.SshPort}")
+            : $"WMI · {(string.IsNullOrWhiteSpace(set.Domain) ? set.Username : $"{set.Domain}\\{set.Username}")}";
     }
 }
 
@@ -28,10 +32,12 @@ public partial class MainViewModel
 {
     // --- Credentials ---
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanMutateCredentials))]
     private void AddCredential()
     {
-        var dialog = new CredentialDialog(InventoryFactory.CreateVerifier(), SelectedMachine?.Address)
+        // Open in the mode matching the selected host, so "select a Linux box → Add credential" lands on SSH.
+        var kind = SelectedMachine?.DeviceType == DeviceType.UnixLinux ? CredentialKind.Linux : CredentialKind.Windows;
+        var dialog = new CredentialDialog(InventoryFactory.CreateVerifier(), SelectedMachine?.Address, kind)
         {
             Owner = Application.Current.MainWindow,
         };
@@ -43,7 +49,7 @@ public partial class MainViewModel
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanMutateCredentials))]
     private void RemoveCredential(CredentialDisplay? display)
     {
         if (display is null) return;
@@ -51,12 +57,40 @@ public partial class MainViewModel
         Credentials.Remove(display);
     }
 
+    [RelayCommand(CanExecute = nameof(CanMutateCredentials))]
+    private void EditCredential(CredentialDisplay? display)
+    {
+        if (display is null) return;
+        var dialog = new CredentialDialog(InventoryFactory.CreateVerifier(), SelectedMachine?.Address,
+            display.Set.Kind, editing: display.Set)
+        {
+            Owner = Application.Current.MainWindow,
+        };
+        if (dialog.ShowDialog() == true && dialog.Result is { } updated)
+        {
+            _credentials.Replace(display.Set, updated);
+            var index = Credentials.IndexOf(display);
+            if (index >= 0) Credentials[index] = new CredentialDisplay(updated);
+            StatusLine = $"Updated credential '{updated.Label}'.";
+        }
+    }
+
+    // Mutating credentials mid-run could dispose a SecureString a connect is actively using.
+    private bool CanMutateCredentials() => !IsScanning;
+
+    partial void OnIsScanningChanged(bool value)
+    {
+        AddCredentialCommand.NotifyCanExecuteChanged();
+        RemoveCredentialCommand.NotifyCanExecuteChanged();
+        EditCredentialCommand.NotifyCanExecuteChanged();
+    }
+
     private IReadOnlyList<CredentialCandidate> ResolveCandidates()
     {
         var candidates = _credentials.ToCandidates();
         return candidates.Count > 0
             ? candidates
-            : new[] { new CredentialCandidate("Current session", WmiCredential.CurrentToken) };
+            : new[] { CredentialSet.CurrentToken().ToCandidate() }; // Windows-kind, so Linux hosts report "no SSH credentials"
     }
 
     // --- Inventory ---
@@ -65,7 +99,7 @@ public partial class MainViewModel
 
     [RelayCommand(CanExecute = nameof(CanInventorySelected))]
     private Task InventorySelectedAsync()
-        => SelectedMachine is { } m ? RunInventoryAsync(new[] { m }) : Task.CompletedTask;
+        => SelectedMachine is { } m ? RunInventoryAsync(new[] { m }, force: true) : Task.CompletedTask;
 
     private bool CanInventorySelected() => !IsScanning && SelectedMachine is not null;
 
@@ -73,7 +107,9 @@ public partial class MainViewModel
     private Task InventoryAliveAsync()
         => RunInventoryAsync(Machines.Where(m => m.IsAlive).ToList());
 
-    private async Task RunInventoryAsync(IReadOnlyList<Machine> targets)
+    /// <param name="force">Attempt every target even when its device type has no inventory support
+    /// (explicit "Inventory selected"); bulk runs skip printers and network gear.</param>
+    private async Task RunInventoryAsync(IReadOnlyList<Machine> targets, bool force = false)
     {
         if (targets.Count == 0) { StatusLine = "No hosts to inventory."; return; }
 
@@ -86,7 +122,7 @@ public partial class MainViewModel
         InventoryAliveCommand.NotifyCanExecuteChanged();
         InventorySelectedCommand.NotifyCanExecuteChanged();
 
-        int done = 0, authed = 0;
+        int done = 0, authed = 0, skipped = 0;
         var sw = System.Diagnostics.Stopwatch.StartNew();
         _runLog.Note($"Inventory of {targets.Count} host(s) started.");
 
@@ -103,20 +139,35 @@ public partial class MainViewModel
                 // Route by device type, and only try credentials meant for that host kind (so a Windows domain
                 // credential is never fired at an SSH server, and vice versa — avoids pointless auth / lockouts).
                 bool isLinux = m.DeviceType == Marco.Core.Model.DeviceType.UnixLinux;
-                var hostKind = isLinux ? CredentialKind.Linux : CredentialKind.Windows;
-                var applicable = candidates.Where(c => c.AppliesTo(hostKind)).ToList();
                 InventoryOutcome outcome;
-                if (applicable.Count == 0)
+                if (!force && m.DeviceType is Marco.Core.Model.DeviceType.Printer or Marco.Core.Model.DeviceType.NetworkDevice)
                 {
-                    m.Status = MachineStatus.AuthFailed;
-                    m.StatusDetail = isLinux ? "No Linux/SSH credentials configured." : "No Windows credentials configured.";
+                    // No WMI/SSH inventory story for these; leave their discovery status untouched.
+                    m.StatusDetail = m.DeviceType == Marco.Core.Model.DeviceType.Printer
+                        ? "Skipped: printers aren't inventoried. Use 'Inventory selected' to try anyway."
+                        : "Skipped: network devices aren't inventoried. Use 'Inventory selected' to try anyway.";
                     outcome = new InventoryOutcome(false, null, m.Status, m.StatusDetail);
+                    Interlocked.Increment(ref skipped);
                 }
                 else
                 {
-                    outcome = isLinux
-                        ? await _linuxInventory.InventoryAsync(m, applicable, null, null, token).ConfigureAwait(false)
-                        : await _inventory.InventoryAsync(m, applicable, null, null, token).ConfigureAwait(false);
+                    var hostKind = isLinux ? CredentialKind.Linux : CredentialKind.Windows;
+                    var applicable = candidates.Where(c => c.AppliesTo(hostKind)).ToList();
+                    if (applicable.Count == 0)
+                    {
+                        // Nothing was attempted, so keep the discovery status — red/orange stays reserved
+                        // for real auth failures.
+                        m.StatusDetail = isLinux
+                            ? "Not inventoried: no Linux/SSH credentials configured."
+                            : "Not inventoried: no Windows credentials configured.";
+                        outcome = new InventoryOutcome(false, null, m.Status, m.StatusDetail);
+                    }
+                    else
+                    {
+                        outcome = isLinux
+                            ? await _linuxInventory.InventoryAsync(m, applicable, null, null, token).ConfigureAwait(false)
+                            : await _inventory.InventoryAsync(m, applicable, null, null, token).ConfigureAwait(false);
+                    }
                 }
                 _runLog.InventoryAttempt(m.Address, outcome.Authenticated, outcome.Status.ToString(), outcome.CredentialLabel);
 
@@ -132,7 +183,8 @@ public partial class MainViewModel
                 });
             }));
 
-            StatusLine = $"Inventory complete. {authed}/{targets.Count} authenticated in {sw.Elapsed.TotalSeconds:0.0}s.";
+            StatusLine = $"Inventory complete. {authed}/{targets.Count} authenticated in {sw.Elapsed.TotalSeconds:0.0}s."
+                + (skipped > 0 ? $" Skipped {skipped} printer/network device(s)." : "");
         }
         catch (OperationCanceledException)
         {

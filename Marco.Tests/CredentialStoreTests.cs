@@ -107,6 +107,31 @@ public class CredentialStoreTests
     }
 
     [Fact]
+    public void CurrentToken_CandidateIsWindowsKind()
+    {
+        // The no-credentials fallback must never be tried against SSH hosts (a session token can't be used there).
+        var candidate = CredentialSet.CurrentToken().ToCandidate();
+        Assert.Equal(Marco.Core.Inventory.CredentialKind.Windows, candidate.Kind);
+        Assert.False(candidate.AppliesTo(Marco.Core.Inventory.CredentialKind.Linux));
+    }
+
+    [Fact]
+    public void Replace_KeepsTryOrderPosition()
+    {
+        using var store = new CredentialStore();
+        var a = new CredentialSet("A", "CORP", "a", null);
+        var b = new CredentialSet("B", "CORP", "b", null);
+        var c = new CredentialSet("C", "CORP", "c", null);
+        store.Add(a); store.Add(b); store.Add(c);
+
+        var edited = new CredentialSet("B2", "CORP", "b2", null);
+        store.Replace(b, edited);
+
+        var labels = store.ToCandidates().Select(x => x.Label).ToList();
+        Assert.Equal(new[] { "A", "B2", "C" }, labels);
+    }
+
+    [Fact]
     public void IsLocalAccount_DetectsUacFilteringCase()
     {
         var local = new Marco.Core.Wmi.WmiCredential { Username = "administrator" }; // no domain

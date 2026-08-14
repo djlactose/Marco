@@ -10,12 +10,17 @@
     <RootNamespace>Marco.App</RootNamespace>
     <AssemblyName>Marco</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\marco.ico</ApplicationIcon>
     <!-- Single-file publish is driven from build/publish.ps1; keep the csproj build clean. -->
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\marco.ico" />
   </ItemGroup>
 
   <ItemGroup>

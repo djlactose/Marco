@@ -7,6 +7,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="{Binding Title}" Height="760" Width="1280"
+        Icon="/Assets/marco.ico"
         WindowStartupLocation="CenterScreen"
         FontFamily="Segoe UI" FontSize="13">
 
@@ -125,21 +126,28 @@
             <Separator Margin="0,14" />
 
             <TextBlock Text="Credentials (for inventory)" Style="{StaticResource SectionHeader}" />
-            <TextBlock Text="Tried in order per host; the first that authenticates is remembered. None = current session token."
+            <TextBlock Text="Matched to each host's type (WMI or SSH) and tried in order; the first that authenticates is remembered. None = current session token (Windows hosts only)."
                        TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,0,0,6" />
             <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Background="White" MinHeight="60" MaxHeight="120">
-              <ListBox ItemsSource="{Binding Credentials}" BorderThickness="0">
+              <ListBox ItemsSource="{Binding Credentials}" BorderThickness="0"
+                       MouseDoubleClick="OnCredentialListDoubleClick">
                 <ListBox.ItemTemplate>
                   <DataTemplate>
-                    <Grid>
+                    <Grid Background="Transparent">
+                      <Grid.ToolTip>
+                        <StackPanel>
+                          <TextBlock Text="{Binding Details}" />
+                          <TextBlock Text="Double-click to edit." Foreground="{StaticResource MutedBrush}" FontSize="11" />
+                        </StackPanel>
+                      </Grid.ToolTip>
                       <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                       </Grid.ColumnDefinitions>
                       <StackPanel Grid.Column="0" Orientation="Horizontal">
-                        <Border Background="#E4EAF2" CornerRadius="2" Padding="4,0" Margin="0,0,6,0" VerticalAlignment="Center"
+                        <Border Background="{StaticResource TagBackgroundBrush}" CornerRadius="2" Padding="4,1" Margin="0,0,6,0" VerticalAlignment="Center"
                                 Visibility="{Binding KindTag, Converter={StaticResource NotEmptyToVis}}">
-                          <TextBlock Text="{Binding KindTag}" FontSize="9" Foreground="#2A6FB0" />
+                          <TextBlock Text="{Binding KindTag}" FontSize="10" Foreground="{StaticResource AccentBrush}" />
                         </Border>
                         <TextBlock Text="{Binding Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                       </StackPanel>
@@ -224,7 +232,8 @@
                   EnableRowVirtualization="True" EnableColumnVirtualization="True"
                   CanUserReorderColumns="True" CanUserResizeColumns="True" CanUserSortColumns="True"
                   GridLinesVisibility="Horizontal" HeadersVisibility="Column"
-                  RowHeight="24" SelectionMode="Single" Background="White">
+                  RowHeight="24" SelectionMode="Single" Background="White"
+                  RowBackground="White" AlternatingRowBackground="{StaticResource RowAltBrush}">
           <DataGrid.Columns>
             <DataGridTemplateColumn Header="" Width="26" CanUserSort="False">
               <DataGridTemplateColumn.CellTemplate>
