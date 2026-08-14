@@ -29,9 +29,26 @@ public sealed partial class RemoteRegistry : IRemoteRegistry
         _isLocal = IsLocal(host);
     }
 
+    private static readonly Lazy<HashSet<string>> OwnNames = new(() =>
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { ".", "localhost", "127.0.0.1", "::1", Environment.MachineName };
+        try
+        {
+            var name = System.Net.Dns.GetHostName();
+            set.Add(name);
+            var entry = System.Net.Dns.GetHostEntry(name);
+            set.Add(entry.HostName);                                  // FQDN
+            foreach (var ip in entry.AddressList) set.Add(ip.ToString()); // own IPs
+        }
+        catch { /* best effort */ }
+        return set;
+    });
+
+    /// <summary>Treat the machine's own name, FQDN, and IPs as local so self-inventory uses the local registry
+    /// path (no SMB/Remote-Registry needed) instead of trying to open a network session to itself.</summary>
     private static bool IsLocal(string host) =>
-        string.IsNullOrEmpty(host) || host is "." or "localhost" or "127.0.0.1" or "::1"
-        || host.Equals(Environment.MachineName, StringComparison.OrdinalIgnoreCase);
+        string.IsNullOrEmpty(host) || OwnNames.Value.Contains(host);
 
     private void EnsureConnected()
     {

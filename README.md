@@ -15,10 +15,15 @@ in a sortable, filterable grid and export to CSV and JSON.
 ## What it collects
 
 - **Discovery:** liveness (ICMP + TCP fallback), reverse DNS / NBNS naming, ARP MAC + OUI vendor, device type.
-- **Inventory (authenticated Windows hosts):** system (make/model/serial/chassis/BIOS/motherboard), OS
-  (edition/version/build/arch/install date/uptime), CPU(s), memory (total + per-slot), storage (physical disks +
-  logical volumes), network adapters (IP/MAC/speed/DHCP/DNS/gateway), and **installed software** from the registry
-  uninstall keys (64-bit, 32-bit, and per-user), deduplicated to match Programs and Features.
+- **Inventory (Windows hosts, over WMI/DCOM):** system (make/model/serial/chassis/BIOS/motherboard), OS
+  (edition/version/build/arch/install date/uptime), current-or-last logged-on user, CPU(s), memory (total +
+  per-slot), storage (physical disks + logical volumes), network adapters (IP/MAC/speed/DHCP/DNS/gateway), and
+  **installed software** from the registry uninstall keys (64-bit, 32-bit, per-user), deduplicated to match
+  Programs and Features. Software reads use the SMB/Remote-Registry path when available and fall back to
+  StdRegProv-over-WMI when it isn't (e.g. over a VPN, or when the Remote Registry service is off).
+- **Inventory (Linux/Unix hosts, over SSH):** OS (distro/version/kernel/arch), hostname, CPU, memory, storage
+  (lsblk + df), network adapters, current/last login, and installed packages (dpkg / rpm / apk). Password auth;
+  the runner routes by device type automatically (Windows→WMI, Linux→SSH).
 
 Additional collectors (services, antivirus, printers, USB, hotfixes, drive/CPU temperatures), the itemization
 tool, HTML/SQLite export, AD browse, and saved-scan history are planned for later phases.

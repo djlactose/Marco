@@ -24,6 +24,7 @@ public partial class MainViewModel : ObservableObject
     private readonly AppPaths _paths;
     private readonly CredentialStore _credentials = new();
     private readonly InventoryRunner _inventory = InventoryFactory.CreateRunner();
+    private readonly Marco.Inventory.Linux.LinuxInventoryRunner _linuxInventory = InventoryFactory.CreateLinuxRunner();
     private readonly RunLog _runLog;
 
     private readonly ConcurrentQueue<Machine> _pending = new();

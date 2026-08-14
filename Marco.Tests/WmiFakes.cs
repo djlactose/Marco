@@ -85,15 +85,26 @@ internal sealed class FakeRemoteRegistry : IRemoteRegistry
     public Dictionary<string, Dictionary<string, object?>> KeyValues { get; } = new(StringComparer.OrdinalIgnoreCase);
     public bool ThrowOnAccess { get; init; }
 
+    private void Guard()
+    {
+        if (ThrowOnAccess) throw new Marco.Core.Wmi.WmiException(Marco.Core.Wmi.WmiFailureKind.AccessDenied, "no registry");
+    }
+
     public IReadOnlyList<RegistryKeyData> EnumerateSubkeys(RegistryRoot root, string path, IReadOnlyCollection<string> valueNames)
-        => Subkeys.TryGetValue($"{root}:{path}", out var list) ? list : new List<RegistryKeyData>();
+    {
+        Guard();
+        return Subkeys.TryGetValue($"{root}:{path}", out var list) ? list : new List<RegistryKeyData>();
+    }
 
     public IReadOnlyList<string> GetSubKeyNames(RegistryRoot root, string path)
-        => SubkeyNames.TryGetValue($"{root}:{path}", out var list) ? list : new List<string>();
+    {
+        Guard();
+        return SubkeyNames.TryGetValue($"{root}:{path}", out var list) ? list : new List<string>();
+    }
 
     public IReadOnlyDictionary<string, object?> GetValues(RegistryRoot root, string path, IReadOnlyCollection<string> valueNames)
     {
-        if (ThrowOnAccess) throw new Marco.Core.Wmi.WmiException(Marco.Core.Wmi.WmiFailureKind.AccessDenied, "no registry");
+        Guard();
         return KeyValues.TryGetValue($"{root}:{path}", out var v) ? v : new Dictionary<string, object?>();
     }
 
@@ -104,5 +115,5 @@ internal sealed class FakeRemoteRegistryFactory : IRemoteRegistryFactory
 {
     private readonly IRemoteRegistry _registry;
     public FakeRemoteRegistryFactory(IRemoteRegistry registry) => _registry = registry;
-    public IRemoteRegistry Create(string host, WmiCredential? credential) => _registry;
+    public IRemoteRegistry Create(string host, WmiCredential? credential, IWmiSession wmiSession) => _registry;
 }

@@ -4,10 +4,11 @@ namespace Marco.Core.Inventory;
 
 public enum RegistryRoot { LocalMachine, Users }
 
-/// <summary>Creates a per-host <see cref="IRemoteRegistry"/> over the given credentials.</summary>
+/// <summary>Creates a per-host <see cref="IRemoteRegistry"/> over the given credentials. The WMI session is
+/// supplied so the implementation can fall back to StdRegProv-over-WMI when the SMB registry path is unavailable.</summary>
 public interface IRemoteRegistryFactory
 {
-    IRemoteRegistry Create(string host, WmiCredential? credential);
+    IRemoteRegistry Create(string host, WmiCredential? credential, IWmiSession wmiSession);
 }
 
 /// <summary>Raw contents of one registry subkey: its name, values, and last-write time (null when the access path

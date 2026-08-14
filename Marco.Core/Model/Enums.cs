@@ -45,11 +45,12 @@ public enum CollectorStatus
     Failed,
 }
 
-/// <summary>Which uninstall hive an installed-software entry came from.</summary>
+/// <summary>Where an installed-software entry came from.</summary>
 public enum SoftwareSource
 {
     Unknown = 0,
     Native64,
     Wow6432,
     PerUser,
+    Package, // Linux distro package (dpkg/rpm/apk)
 }

@@ -86,7 +86,7 @@ public sealed class InventoryRunner
         Remember(machine.Address, winner.Label);
 
         using (session)
-        using (var registry = _registries.Create(machine.Address, winner.Credential))
+        using (var registry = _registries.Create(machine.Address, winner.Credential, session))
         {
             var context = new InventoryContext(session, registry);
             int ok = 0, failed = 0;

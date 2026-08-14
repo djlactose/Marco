@@ -94,7 +94,10 @@ public partial class MainViewModel
 
             await Task.Run(() => Parallel.ForEachAsync(targets, options, async (m, token) =>
             {
-                var outcome = await _inventory.InventoryAsync(m, candidates, null, null, token).ConfigureAwait(false);
+                // Route by device type: Linux/Unix over SSH, everything else over WMI.
+                var outcome = m.DeviceType == Marco.Core.Model.DeviceType.UnixLinux
+                    ? await _linuxInventory.InventoryAsync(m, candidates, null, null, token).ConfigureAwait(false)
+                    : await _inventory.InventoryAsync(m, candidates, null, null, token).ConfigureAwait(false);
                 _runLog.InventoryAttempt(m.Address, outcome.Authenticated, outcome.Status.ToString(), outcome.CredentialLabel);
 
                 // Raise collection change notifications on the UI thread so the detail view re-renders.
