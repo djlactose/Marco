@@ -114,6 +114,8 @@
             <CheckBox Content="Resolve names (DNS / NBNS)" IsChecked="{Binding ResolveNames}" Margin="0,3" />
             <CheckBox Content="Resolve MAC (ARP, on-subnet)" IsChecked="{Binding ResolveMac}" Margin="0,3" />
             <CheckBox Content="Show unreachable hosts" IsChecked="{Binding IncludeUnreachable}" Margin="0,3" />
+            <CheckBox Content="Inventory automatically after discovery" IsChecked="{Binding AutoInventory}" Margin="0,3"
+                      ToolTip="When discovery finishes, immediately inventory the alive hosts using the credentials below." />
 
             <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
               <TextBlock Text="Concurrency" VerticalAlignment="Center" Margin="0,0,8,0" />

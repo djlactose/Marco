@@ -54,6 +54,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _resolveMac = true;
     [ObservableProperty] private bool _includeUnreachable;
 
+    /// <summary>When set, automatically inventory the alive hosts as soon as discovery finishes.</summary>
+    [ObservableProperty] private bool _autoInventory;
+
     // --- Filter / selection ---
     [ObservableProperty] private string _filterText = "";
     [ObservableProperty] private Machine? _selectedMachine;
@@ -179,6 +182,7 @@ public partial class MainViewModel : ObservableObject
         _runLog.ScanStarted(_lastRanges, targets.Count);
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
+        bool discoveryCompleted = false;
         try
         {
             StatusLine = $"Scanning {targets.Count:N0} addresses…";
@@ -186,9 +190,12 @@ public partial class MainViewModel : ObservableObject
                 targets, settings, targets.Count, IncludeUnreachable,
                 m => _pending.Enqueue(m), progress, _pause, _cts.Token));
             StatusLine = AliveCount > 0
-                ? $"Discovery done: {AliveCount:N0} alive, {UnreachableCount:N0} unreachable. Now click ‘Inventory alive’ to pull system/software details."
+                ? (AutoInventory
+                    ? $"Discovery done: {AliveCount:N0} alive. Starting inventory…"
+                    : $"Discovery done: {AliveCount:N0} alive, {UnreachableCount:N0} unreachable. Now click ‘Inventory alive’ to pull system/software details.")
                 : $"Discovery done: 0 alive, {UnreachableCount:N0} unreachable.";
             _runLog.ScanFinished(AliveCount, UnreachableCount, sw.Elapsed.TotalSeconds);
+            discoveryCompleted = true;
         }
         catch (OperationCanceledException)
         {
@@ -209,6 +216,14 @@ public partial class MainViewModel : ObservableObject
             StartScanCommand.NotifyCanExecuteChanged();
             InventoryAliveCommand.NotifyCanExecuteChanged();
             InventorySelectedCommand.NotifyCanExecuteChanged();
+        }
+
+        // Chain straight into inventory when requested (after discovery's own cleanup has run).
+        if (discoveryCompleted && AutoInventory)
+        {
+            var alive = Machines.Where(m => m.IsAlive).ToList();
+            if (alive.Count > 0)
+                await RunInventoryAsync(alive);
         }
     }
 
