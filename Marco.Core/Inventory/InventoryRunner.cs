@@ -3,8 +3,19 @@ using Marco.Core.Wmi;
 
 namespace Marco.Core.Inventory;
 
-/// <summary>One credential candidate to try for a host, carrying its display label for attribution.</summary>
-public sealed record CredentialCandidate(string Label, WmiCredential Credential);
+/// <summary>Which host kind a credential is meant for. <see cref="Any"/> is tried on both; the others are tried
+/// only on the matching host type, so a Windows domain credential is never fired at an SSH server (and vice
+/// versa), avoiding pointless auth attempts and account lockouts.</summary>
+public enum CredentialKind { Any, Windows, Linux }
+
+/// <summary>One credential candidate to try for a host, carrying its display label for attribution, the host
+/// kind it targets, and (for SSH) the port.</summary>
+public sealed record CredentialCandidate(
+    string Label, WmiCredential Credential, CredentialKind Kind = CredentialKind.Any, int SshPort = 22)
+{
+    /// <summary>True if this credential should be tried against a host of the given kind.</summary>
+    public bool AppliesTo(CredentialKind hostKind) => Kind == CredentialKind.Any || Kind == hostKind;
+}
 
 /// <summary>Result of an inventory pass against a host.</summary>
 public sealed record InventoryOutcome(bool Authenticated, string? CredentialLabel, MachineStatus Status, string? Detail);

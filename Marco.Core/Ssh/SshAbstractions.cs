@@ -1,4 +1,4 @@
-namespace Marco.Inventory.Ssh;
+namespace Marco.Core.Ssh;
 
 /// <summary>Result of running one remote command.</summary>
 public readonly record struct SshResult(int ExitStatus, string StdOut, string StdError)

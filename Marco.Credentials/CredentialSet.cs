@@ -19,6 +19,12 @@ public sealed class CredentialSet : IDisposable
     public SecureString? Password { get; private set; }
     public bool IsCurrentToken { get; }
 
+    /// <summary>Which host kind this credential targets (Windows/WMI, Linux/SSH, or Any).</summary>
+    public CredentialKind Kind { get; set; } = CredentialKind.Any;
+
+    /// <summary>SSH port for Linux credentials.</summary>
+    public int SshPort { get; set; } = 22;
+
     public CredentialSet(string label, string? domain, string? username, SecureString? password, bool isCurrentToken = false)
     {
         Label = label;
@@ -29,13 +35,13 @@ public sealed class CredentialSet : IDisposable
     }
 
     public static CredentialSet CurrentToken(string label = "Current session")
-        => new(label, null, null, null, isCurrentToken: true);
+        => new(label, null, null, null, isCurrentToken: true) { Kind = CredentialKind.Windows };
 
     public WmiCredential ToWmiCredential() => IsCurrentToken
         ? WmiCredential.CurrentToken
         : new WmiCredential { Domain = Domain, Username = Username, Password = Password };
 
-    public CredentialCandidate ToCandidate() => new(Label, ToWmiCredential());
+    public CredentialCandidate ToCandidate() => new(Label, ToWmiCredential(), Kind, SshPort);
 
     /// <summary>Set/replace the password from a transient plaintext string (e.g. unpacked from the Windows
     /// credential dialog), copying into a SecureString and leaving the caller to clear the plaintext.</summary>

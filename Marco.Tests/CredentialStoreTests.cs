@@ -65,6 +65,48 @@ public class CredentialStoreTests
     }
 
     [Fact]
+    public void CredentialKind_FiltersByHostType()
+    {
+        var win = new Marco.Core.Inventory.CredentialCandidate("w", new Marco.Core.Wmi.WmiCredential { Username = "a" }, Marco.Core.Inventory.CredentialKind.Windows);
+        var lin = new Marco.Core.Inventory.CredentialCandidate("l", new Marco.Core.Wmi.WmiCredential { Username = "b" }, Marco.Core.Inventory.CredentialKind.Linux, SshPort: 2222);
+        var any = new Marco.Core.Inventory.CredentialCandidate("x", new Marco.Core.Wmi.WmiCredential { Username = "c" });
+
+        Assert.True(win.AppliesTo(Marco.Core.Inventory.CredentialKind.Windows));
+        Assert.False(win.AppliesTo(Marco.Core.Inventory.CredentialKind.Linux));
+        Assert.True(lin.AppliesTo(Marco.Core.Inventory.CredentialKind.Linux));
+        Assert.False(lin.AppliesTo(Marco.Core.Inventory.CredentialKind.Windows));
+        Assert.True(any.AppliesTo(Marco.Core.Inventory.CredentialKind.Windows));
+        Assert.True(any.AppliesTo(Marco.Core.Inventory.CredentialKind.Linux));
+        Assert.Equal(2222, lin.SshPort);
+    }
+
+    [Fact]
+    public void SaveAndLoad_PreservesKindAndPort()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "marco-cred-" + Guid.NewGuid().ToString("N")[..8] + ".dat");
+        try
+        {
+            using (var store = new CredentialStore())
+            {
+                var lin = new CredentialSet("web-ssh", null, "root", null)
+                    { Kind = Marco.Core.Inventory.CredentialKind.Linux, SshPort = 2222 };
+                lin.SetPassword("pw");
+                store.Add(lin);
+                store.Save(path);
+            }
+            using (var loaded = new CredentialStore())
+            {
+                loaded.Load(path);
+                var s = loaded.Sets[0];
+                Assert.Equal(Marco.Core.Inventory.CredentialKind.Linux, s.Kind);
+                Assert.Equal(2222, s.SshPort);
+                Assert.Equal("root", s.Username);
+            }
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact]
     public void IsLocalAccount_DetectsUacFilteringCase()
     {
         var local = new Marco.Core.Wmi.WmiCredential { Username = "administrator" }; // no domain

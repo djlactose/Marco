@@ -136,7 +136,13 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                       </Grid.ColumnDefinitions>
-                      <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                      <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <Border Background="#E4EAF2" CornerRadius="2" Padding="4,0" Margin="0,0,6,0" VerticalAlignment="Center"
+                                Visibility="{Binding KindTag, Converter={StaticResource NotEmptyToVis}}">
+                          <TextBlock Text="{Binding KindTag}" FontSize="9" Foreground="#2A6FB0" />
+                        </Border>
+                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
                       <Button Grid.Column="1" Content="✕" Padding="4,0" MinWidth="0" Margin="4,0,0,0"
                               ToolTip="Remove"
                               Command="{Binding DataContext.RemoveCredentialCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"

@@ -1,3 +1,4 @@
+using Marco.Core.Ssh;
 using Renci.SshNet;
 using Renci.SshNet.Common;
 
@@ -62,17 +63,17 @@ public sealed class SshNetSessionFactory : ISshSessionFactory
         catch (SshAuthenticationException ex)
         {
             client.Dispose();
-            throw new SshException(SshFailureKind.AuthFailed, ex.Message, ex);
+            throw new Marco.Core.Ssh.SshException(SshFailureKind.AuthFailed, ex.Message, ex);
         }
         catch (SshOperationTimeoutException ex)
         {
             client.Dispose();
-            throw new SshException(SshFailureKind.Timeout, ex.Message, ex);
+            throw new Marco.Core.Ssh.SshException(SshFailureKind.Timeout, ex.Message, ex);
         }
         catch (Exception ex)
         {
             client.Dispose();
-            throw new SshException(SshFailureKind.Unreachable, ex.Message, ex);
+            throw new Marco.Core.Ssh.SshException(SshFailureKind.Unreachable, ex.Message, ex);
         }
 
         return new SshNetSession(client, host);

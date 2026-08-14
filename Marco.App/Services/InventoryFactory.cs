@@ -20,8 +20,8 @@ public static class InventoryFactory
     /// <summary>SSH-based inventory for Linux/Unix hosts.</summary>
     public static LinuxInventoryRunner CreateLinuxRunner() => new(new SshNetSessionFactory());
 
-    /// <summary>A verifier that tests credentials via the same WMI connect path inventory uses (shorter timeout
+    /// <summary>A verifier that tests credentials via the same WMI or SSH path inventory uses (shorter timeout
     /// for snappier feedback).</summary>
     public static CredentialVerifier CreateVerifier() =>
-        new(new SystemManagementWmiSessionFactory(timeoutSeconds: 15));
+        new(new SystemManagementWmiSessionFactory(timeoutSeconds: 15), new SshNetSessionFactory());
 }

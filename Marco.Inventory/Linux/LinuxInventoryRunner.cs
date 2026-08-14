@@ -2,7 +2,7 @@ using System.Net;
 using System.Security;
 using Marco.Core.Inventory;
 using Marco.Core.Model;
-using Marco.Inventory.Ssh;
+using Marco.Core.Ssh;
 
 namespace Marco.Inventory.Linux;
 
@@ -58,8 +58,9 @@ public sealed class LinuxInventoryRunner
             var pass = ToPlainText(candidate.Credential.Password);
             try
             {
+                int port = candidate.SshPort > 0 ? candidate.SshPort : _port;
                 session = await Task.Run(() =>
-                    _factory.Connect(machine.Address, _port, user, pass, _timeoutSeconds, ct), ct).ConfigureAwait(false);
+                    _factory.Connect(machine.Address, port, user, pass, _timeoutSeconds, ct), ct).ConfigureAwait(false);
                 winner = candidate;
                 break;
             }

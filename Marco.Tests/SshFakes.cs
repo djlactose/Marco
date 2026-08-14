@@ -1,4 +1,4 @@
-using Marco.Inventory.Ssh;
+using Marco.Core.Ssh;
 
 namespace Marco.Tests;
 

@@ -3,7 +3,7 @@ using Marco.Core.Inventory;
 using Marco.Core.Model;
 using Marco.Core.Wmi;
 using Marco.Inventory.Linux;
-using Marco.Inventory.Ssh;
+using Marco.Core.Ssh;
 using Xunit;
 
 namespace Marco.Tests;

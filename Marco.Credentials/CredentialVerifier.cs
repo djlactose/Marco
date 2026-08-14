@@ -1,4 +1,6 @@
+using System.Net;
 using System.Runtime.InteropServices;
+using Marco.Core.Ssh;
 using Marco.Core.Wmi;
 
 namespace Marco.Credentials;
@@ -23,8 +25,52 @@ public sealed record VerifyResult(VerifyOutcome Outcome, string Message, string?
 public sealed class CredentialVerifier
 {
     private readonly IWmiSessionFactory _factory;
+    private readonly ISshSessionFactory? _ssh;
 
-    public CredentialVerifier(IWmiSessionFactory factory) => _factory = factory;
+    public CredentialVerifier(IWmiSessionFactory factory, ISshSessionFactory? ssh = null)
+    {
+        _factory = factory;
+        _ssh = ssh;
+    }
+
+    /// <summary>Verify a Linux credential by opening a real SSH session and running a trivial command. Uses the
+    /// same SSH path inventory uses, so a green result means inventory will authenticate.</summary>
+    public async Task<VerifyResult> VerifyLinuxHostAsync(CredentialSet set, string host, int port, CancellationToken ct)
+    {
+        if (_ssh is null) return new VerifyResult(VerifyOutcome.Error, "SSH verification is unavailable.");
+        if (string.IsNullOrWhiteSpace(host)) return new VerifyResult(VerifyOutcome.Error, "Enter a host to test against.");
+        if (string.IsNullOrWhiteSpace(set.Username)) return new VerifyResult(VerifyOutcome.Error, "A username is required.");
+
+        var pw = set.Password is null ? "" : new NetworkCredential(string.Empty, set.Password).Password;
+        try
+        {
+            using var session = await Task.Run(() =>
+                _ssh.Connect(host.Trim(), port <= 0 ? 22 : port, set.Username!, pw, 15, ct), ct).ConfigureAwait(false);
+            var res = session.Run("uname -sr", ct);
+            var detail = res.StdOut.Trim();
+            return new VerifyResult(VerifyOutcome.Success,
+                detail.Length > 0 ? $"Authenticated to {host} over SSH ({detail})." : $"Authenticated to {host} over SSH.");
+        }
+        catch (OperationCanceledException)
+        {
+            return new VerifyResult(VerifyOutcome.Error, "Verification cancelled or timed out.");
+        }
+        catch (SshException ex)
+        {
+            var outcome = ex.Kind switch
+            {
+                SshFailureKind.AuthFailed => VerifyOutcome.BadCredentials,
+                SshFailureKind.Unreachable => VerifyOutcome.Unreachable,
+                SshFailureKind.Timeout => VerifyOutcome.Unreachable,
+                _ => VerifyOutcome.Error,
+            };
+            return new VerifyResult(outcome, $"SSH: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            return new VerifyResult(VerifyOutcome.Error, ex.Message);
+        }
+    }
 
     public async Task<VerifyResult> VerifyAgainstHostAsync(CredentialSet set, string host, CancellationToken ct)
     {

@@ -58,7 +58,8 @@ public sealed class CredentialStore : IDisposable
 
     // --- DPAPI persistence ---
 
-    private sealed record PersistedEntry(string Label, string? Domain, string? Username, bool IsCurrentToken, string? ProtectedPassword);
+    private sealed record PersistedEntry(string Label, string? Domain, string? Username, bool IsCurrentToken,
+        string? ProtectedPassword, Marco.Core.Inventory.CredentialKind Kind = Marco.Core.Inventory.CredentialKind.Any, int SshPort = 22);
 
     /// <summary>Persist to a DPAPI-protected file scoped to the current user. Passwords are individually
     /// encrypted; nothing plaintext is written.</summary>
@@ -80,7 +81,7 @@ public sealed class CredentialStore : IDisposable
                     }
                     finally { Array.Clear(plain, 0, plain.Length); }
                 }
-                return new PersistedEntry(s.Label, s.Domain, s.Username, s.IsCurrentToken, protectedPwd);
+                return new PersistedEntry(s.Label, s.Domain, s.Username, s.IsCurrentToken, protectedPwd, s.Kind, s.SshPort);
             }).ToList();
         }
 
@@ -104,7 +105,7 @@ public sealed class CredentialStore : IDisposable
                 loaded.Add(CredentialSet.CurrentToken(e.Label));
                 continue;
             }
-            var set = new CredentialSet(e.Label, e.Domain, e.Username, null);
+            var set = new CredentialSet(e.Label, e.Domain, e.Username, null) { Kind = e.Kind, SshPort = e.SshPort };
             if (e.ProtectedPassword is not null)
             {
                 try

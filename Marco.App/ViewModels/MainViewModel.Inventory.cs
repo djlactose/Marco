@@ -14,8 +14,14 @@ namespace Marco.App.ViewModels;
 public sealed class CredentialDisplay
 {
     public string Label { get; }
+    public string KindTag { get; }
     public CredentialSet Set { get; }
-    public CredentialDisplay(CredentialSet set) { Set = set; Label = set.Label; }
+    public CredentialDisplay(CredentialSet set)
+    {
+        Set = set;
+        Label = set.Label;
+        KindTag = set.Kind switch { CredentialKind.Linux => "SSH", CredentialKind.Windows => "WMI", _ => "" };
+    }
 }
 
 public partial class MainViewModel
@@ -94,10 +100,24 @@ public partial class MainViewModel
 
             await Task.Run(() => Parallel.ForEachAsync(targets, options, async (m, token) =>
             {
-                // Route by device type: Linux/Unix over SSH, everything else over WMI.
-                var outcome = m.DeviceType == Marco.Core.Model.DeviceType.UnixLinux
-                    ? await _linuxInventory.InventoryAsync(m, candidates, null, null, token).ConfigureAwait(false)
-                    : await _inventory.InventoryAsync(m, candidates, null, null, token).ConfigureAwait(false);
+                // Route by device type, and only try credentials meant for that host kind (so a Windows domain
+                // credential is never fired at an SSH server, and vice versa — avoids pointless auth / lockouts).
+                bool isLinux = m.DeviceType == Marco.Core.Model.DeviceType.UnixLinux;
+                var hostKind = isLinux ? CredentialKind.Linux : CredentialKind.Windows;
+                var applicable = candidates.Where(c => c.AppliesTo(hostKind)).ToList();
+                InventoryOutcome outcome;
+                if (applicable.Count == 0)
+                {
+                    m.Status = MachineStatus.AuthFailed;
+                    m.StatusDetail = isLinux ? "No Linux/SSH credentials configured." : "No Windows credentials configured.";
+                    outcome = new InventoryOutcome(false, null, m.Status, m.StatusDetail);
+                }
+                else
+                {
+                    outcome = isLinux
+                        ? await _linuxInventory.InventoryAsync(m, applicable, null, null, token).ConfigureAwait(false)
+                        : await _inventory.InventoryAsync(m, applicable, null, null, token).ConfigureAwait(false);
+                }
                 _runLog.InventoryAttempt(m.Address, outcome.Authenticated, outcome.Status.ToString(), outcome.CredentialLabel);
 
                 // Raise collection change notifications on the UI thread so the detail view re-renders.
