@@ -11,11 +11,21 @@ namespace Marco.Discovery;
 /// </summary>
 public sealed partial class ArpResolver : IMacResolver
 {
+    // Local subnets, resolved once. Used to reject off-subnet (routed / VPN) ARP results, which are the gateway's
+    // MAC rather than the host's — the cause of "every machine has the same MAC" when scanning over a VPN.
+    private readonly Lazy<IReadOnlyList<LocalSubnet>> _localSubnets = new(LocalNetworks.Enumerate);
+
     [LibraryImport("iphlpapi.dll", SetLastError = true)]
     private static partial int SendARP(uint destIp, uint srcIp, byte[] macAddr, ref uint macAddrLen);
 
     public Task<string?> GetMacAsync(string address, CancellationToken ct)
-        => Task.Run(() => Resolve(address), ct);
+        => Task.Run(() =>
+        {
+            // ARP is only meaningful for on-link hosts. Off-subnet (routed/VPN) → no MAC, not the gateway's.
+            if (IPAddress.TryParse(address, out var ip) && !LocalNetworks.IsOnLocalSubnet(ip, _localSubnets.Value))
+                return null;
+            return Resolve(address);
+        }, ct);
 
     public static string? Resolve(string address)
     {

@@ -87,6 +87,29 @@ public static class LocalNetworks
         return VpnMarkers.Any(m => text.Contains(m));
     }
 
+    /// <summary>True when <paramref name="target"/> is on the same L2 segment as one of this machine's NICs — i.e.
+    /// directly ARP-able. Off-subnet targets (routed, including everything over a VPN) are NOT on-link: an ARP for
+    /// them returns the gateway's MAC, not the host's, so callers must not attribute that MAC to the host.</summary>
+    public static bool IsOnLocalSubnet(IPAddress target, IReadOnlyList<LocalSubnet> subnets)
+    {
+        if (target.AddressFamily != AddressFamily.InterNetwork) return false;
+        uint t = ToUint(target);
+        foreach (var s in subnets)
+        {
+            if (!IPAddress.TryParse(s.IpAddress, out var nicIp) || nicIp.AddressFamily != AddressFamily.InterNetwork)
+                continue;
+            uint mask = s.PrefixLength == 0 ? 0u : uint.MaxValue << (32 - s.PrefixLength);
+            if ((t & mask) == (ToUint(nicIp) & mask)) return true;
+        }
+        return false;
+    }
+
+    private static uint ToUint(IPAddress ip)
+    {
+        var b = ip.GetAddressBytes();
+        return (uint)((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]);
+    }
+
     /// <summary>Compute the network CIDR for an IPv4 address and prefix (exposed for testing).</summary>
     public static string? ToCidr(IPAddress ip, int prefix)
     {

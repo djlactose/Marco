@@ -41,6 +41,22 @@ public class LocalNetworksTests
     }
 
     [Fact]
+    public void IsOnLocalSubnet_TrueOnlyForOnLinkTargets()
+    {
+        // Emulates the VPN case: local NICs are 10.69/172.25/172.30, scanning 192.168.0.x over the tunnel.
+        var locals = new List<LocalSubnet>
+        {
+            new("Ethernet", "10.69.22.15", 24, "10.69.22.0/24", HasGateway: true),
+            new("vEthernet", "172.25.32.1", 20, "172.25.32.0/20", HasGateway: false),
+        };
+
+        Assert.True(LocalNetworks.IsOnLocalSubnet(IPAddress.Parse("10.69.22.200"), locals));  // on-link
+        Assert.True(LocalNetworks.IsOnLocalSubnet(IPAddress.Parse("172.25.40.5"), locals));   // on-link (/20)
+        Assert.False(LocalNetworks.IsOnLocalSubnet(IPAddress.Parse("192.168.0.25"), locals)); // routed over VPN
+        Assert.False(LocalNetworks.IsOnLocalSubnet(IPAddress.Parse("10.69.23.1"), locals));   // just outside the /24
+    }
+
+    [Fact]
     public void Enumerate_ReturnsWellFormedParseableSubnets()
     {
         // Runs against the real NICs of the test host; assert shape rather than specific values.
