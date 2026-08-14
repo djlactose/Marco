@@ -30,7 +30,7 @@ public sealed class CsvExporter
     {
         var sb = new StringBuilder();
         Row(sb, "Address", "Name", "FQDN", "Type", "Status", "Vendor", "MAC", "Virtual",
-            "Manufacturer", "Model", "Serial", "Chassis", "Domain", "LoggedOnUser",
+            "Manufacturer", "Model", "Serial", "Chassis", "Domain", "User", "LastLoggedOnUser",
             "OS", "OSVersion", "OSBuild", "Arch", "InstallDate", "LastBoot",
             "CPU", "Cores", "LogicalCPUs", "RAM_GB", "SlotsUsed", "SlotsTotal",
             "Disks", "SoftwareCount", "Adapters", "BIOS", "Motherboard", "LastScanned");
@@ -42,7 +42,7 @@ public sealed class CsvExporter
                 m.Address, m.Name, m.Fqdn, m.DeviceType.ToString(), m.Status.ToString(), m.Vendor,
                 string.Join(" ", m.MacAddresses), m.IsVirtual ? "Yes" : "",
                 m.System.Manufacturer, m.System.Model, m.System.SerialNumber, m.System.ChassisType,
-                m.System.Domain, m.System.LoggedOnUser,
+                m.System.Domain, m.System.CurrentOrLastUser, m.System.LastLoggedOnUser,
                 m.Os.Caption, m.Os.Version, m.Os.Build, m.Os.Architecture,
                 Date(m.Os.InstallDate), Date(m.Os.LastBoot),
                 cpu?.Name, Num(cpu?.Cores), Num(cpu?.LogicalProcessors),

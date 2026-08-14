@@ -82,17 +82,23 @@ public sealed record MachineDto(
 }
 
 public sealed record SystemInfoDto(string? Manufacturer, string? Model, string? SerialNumber, string? AssetTag,
-    string? ChassisType, string? Domain, bool PartOfDomain, string? LoggedOnUser, string? BiosVersion,
-    DateTime? BiosDate, string? MotherboardManufacturer, string? MotherboardModel)
+    string? ChassisType, string? Domain, bool PartOfDomain, string? LoggedOnUser, string? LastLoggedOnUser,
+    string? BiosVersion, DateTime? BiosDate, string? MotherboardManufacturer, string? MotherboardModel)
 {
+    public string? CurrentOrLastUser =>
+        !string.IsNullOrWhiteSpace(LoggedOnUser) ? LoggedOnUser
+        : !string.IsNullOrWhiteSpace(LastLoggedOnUser) ? $"{LastLoggedOnUser} (last)"
+        : null;
+
     public static SystemInfoDto From(SystemInfo s) => new(s.Manufacturer, s.Model, s.SerialNumber, s.AssetTag,
-        s.ChassisType, s.Domain, s.PartOfDomain, s.LoggedOnUser, s.BiosVersion, s.BiosDate,
+        s.ChassisType, s.Domain, s.PartOfDomain, s.LoggedOnUser, s.LastLoggedOnUser, s.BiosVersion, s.BiosDate,
         s.MotherboardManufacturer, s.MotherboardModel);
 
     public void ApplyTo(SystemInfo s)
     {
         s.Manufacturer = Manufacturer; s.Model = Model; s.SerialNumber = SerialNumber; s.AssetTag = AssetTag;
         s.ChassisType = ChassisType; s.Domain = Domain; s.PartOfDomain = PartOfDomain; s.LoggedOnUser = LoggedOnUser;
+        s.LastLoggedOnUser = LastLoggedOnUser;
         s.BiosVersion = BiosVersion; s.BiosDate = BiosDate; s.MotherboardManufacturer = MotherboardManufacturer;
         s.MotherboardModel = MotherboardModel;
     }

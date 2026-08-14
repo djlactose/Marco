@@ -11,6 +11,7 @@ public sealed class SystemInfo : ObservableBase
     private string? _domain;
     private bool _partOfDomain;
     private string? _loggedOnUser;
+    private string? _lastLoggedOnUser;
     private string? _biosVersion;
     private DateTime? _biosDate;
     private string? _motherboardManufacturer;
@@ -23,7 +24,17 @@ public sealed class SystemInfo : ObservableBase
     public string? ChassisType { get => _chassisType; set => Set(ref _chassisType, value); }
     public string? Domain { get => _domain; set => Set(ref _domain, value); }
     public bool PartOfDomain { get => _partOfDomain; set => Set(ref _partOfDomain, value); }
-    public string? LoggedOnUser { get => _loggedOnUser; set => Set(ref _loggedOnUser, value); }
+    public string? LoggedOnUser { get => _loggedOnUser; set { if (Set(ref _loggedOnUser, value)) Raise(nameof(CurrentOrLastUser)); } }
+
+    /// <summary>The last account to sign in (from LogonUI), used when no one is currently logged on.</summary>
+    public string? LastLoggedOnUser { get => _lastLoggedOnUser; set { if (Set(ref _lastLoggedOnUser, value)) Raise(nameof(CurrentOrLastUser)); } }
+
+    /// <summary>Current console user if signed in; otherwise the last person to sign in, suffixed "(last)".</summary>
+    public string? CurrentOrLastUser =>
+        !string.IsNullOrWhiteSpace(_loggedOnUser) ? _loggedOnUser
+        : !string.IsNullOrWhiteSpace(_lastLoggedOnUser) ? $"{_lastLoggedOnUser} (last)"
+        : null;
+
     public string? BiosVersion { get => _biosVersion; set => Set(ref _biosVersion, value); }
     public DateTime? BiosDate { get => _biosDate; set => Set(ref _biosDate, value); }
     public string? MotherboardManufacturer { get => _motherboardManufacturer; set => Set(ref _motherboardManufacturer, value); }

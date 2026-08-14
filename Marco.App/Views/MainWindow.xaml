@@ -234,6 +234,7 @@
             <DataGridTextColumn Header="Vendor" Binding="{Binding Vendor}" Width="130" />
             <DataGridTextColumn Header="MAC" Binding="{Binding PrimaryMac}" Width="130" />
             <DataGridTextColumn Header="Virtual" Binding="{Binding IsVirtual}" Width="60" />
+            <DataGridTextColumn Header="User" Binding="{Binding System.CurrentOrLastUser}" Width="150" />
             <DataGridTextColumn Header="Manufacturer" Binding="{Binding System.Manufacturer}" Width="130" />
             <DataGridTextColumn Header="Model" Binding="{Binding System.Model}" Width="130" />
             <DataGridTextColumn Header="OS" Binding="{Binding Os.Caption}" Width="170" />
@@ -305,8 +306,8 @@
                         <TextBlock Text="{Binding System.ChassisType, StringFormat='Chassis: {0}'}" />
                         <TextBlock Text="{Binding System.BiosVersion, StringFormat='BIOS: {0}'}" />
                         <TextBlock Text="{Binding System.MotherboardModel, StringFormat='Board: {0}'}" />
-                        <TextBlock Text="{Binding System.LoggedOnUser, StringFormat='User: {0}'}"
-                                   Visibility="{Binding System.LoggedOnUser, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding System.CurrentOrLastUser, StringFormat='User: {0}'}"
+                                   Visibility="{Binding System.CurrentOrLastUser, Converter={StaticResource NotEmptyToVis}}" />
                       </StackPanel>
                       <StackPanel Visibility="{Binding Os.Caption, Converter={StaticResource NotEmptyToVis}}">
                         <TextBlock Text="Operating system" Style="{StaticResource SectionHeader}" Margin="0,0,0,4" />

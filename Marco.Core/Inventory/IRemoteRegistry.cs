@@ -35,4 +35,7 @@ public interface IRemoteRegistry : IDisposable
 
     /// <summary>Top-level subkey names of a path (used to enumerate loaded user SIDs under HKU).</summary>
     IReadOnlyList<string> GetSubKeyNames(RegistryRoot root, string path);
+
+    /// <summary>Read named values from a single key (not its subkeys). Returns an empty map if the key is absent.</summary>
+    IReadOnlyDictionary<string, object?> GetValues(RegistryRoot root, string path, IReadOnlyCollection<string> valueNames);
 }

@@ -34,6 +34,53 @@ public class CollectorTests
         Assert.Equal("0ABC", m.System.MotherboardModel);
     }
 
+    private const string LogonUiKey =
+        "LocalMachine:SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentication\\LogonUI";
+
+    [Fact]
+    public async Task SystemCollector_ShowsLastLoggedOnUser_WhenNobodyCurrentlyLoggedOn()
+    {
+        var wmi = new FakeWmiSession()
+            .With("Win32_ComputerSystem", Obj(("Name", "PC2"), ("UserName", null))); // nobody at console
+        var reg = new FakeRemoteRegistry();
+        reg.KeyValues[LogonUiKey] = new() { ["LastLoggedOnUser"] = "CORP\\jdoe" };
+
+        var m = new Machine("10.0.0.9");
+        await new SystemCollector().CollectAsync(Ctx(wmi, reg), m, default);
+
+        Assert.Null(m.System.LoggedOnUser);
+        Assert.Equal("CORP\\jdoe", m.System.LastLoggedOnUser);
+        Assert.Equal("CORP\\jdoe (last)", m.System.CurrentOrLastUser);
+    }
+
+    [Fact]
+    public async Task SystemCollector_PrefersCurrentUser_OverLast()
+    {
+        var wmi = new FakeWmiSession()
+            .With("Win32_ComputerSystem", Obj(("Name", "PC3"), ("UserName", "CORP\\alice")));
+        var reg = new FakeRemoteRegistry();
+        reg.KeyValues[LogonUiKey] = new() { ["LastLoggedOnUser"] = "CORP\\bob" };
+
+        var m = new Machine("10.0.0.10");
+        await new SystemCollector().CollectAsync(Ctx(wmi, reg), m, default);
+
+        Assert.Equal("CORP\\alice", m.System.CurrentOrLastUser); // current wins, no "(last)"
+    }
+
+    [Fact]
+    public async Task SystemCollector_RegistryUnavailable_DoesNotFailCollector()
+    {
+        var wmi = new FakeWmiSession()
+            .With("Win32_ComputerSystem", Obj(("Name", "PC4"), ("Manufacturer", "Dell")));
+        var reg = new FakeRemoteRegistry { ThrowOnAccess = true };
+
+        var m = new Machine("10.0.0.11");
+        await new SystemCollector().CollectAsync(Ctx(wmi, reg), m, default); // must not throw
+
+        Assert.Equal("Dell", m.System.Manufacturer);
+        Assert.Null(m.System.LastLoggedOnUser);
+    }
+
     [Fact]
     public async Task OsCollector_SetsServer_FromProductType()
     {

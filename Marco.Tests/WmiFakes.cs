@@ -82,12 +82,20 @@ internal sealed class FakeRemoteRegistry : IRemoteRegistry
     public bool SupportsLastWriteTime { get; init; } = true;
     public Dictionary<string, List<RegistryKeyData>> Subkeys { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, List<string>> SubkeyNames { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, Dictionary<string, object?>> KeyValues { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public bool ThrowOnAccess { get; init; }
 
     public IReadOnlyList<RegistryKeyData> EnumerateSubkeys(RegistryRoot root, string path, IReadOnlyCollection<string> valueNames)
         => Subkeys.TryGetValue($"{root}:{path}", out var list) ? list : new List<RegistryKeyData>();
 
     public IReadOnlyList<string> GetSubKeyNames(RegistryRoot root, string path)
         => SubkeyNames.TryGetValue($"{root}:{path}", out var list) ? list : new List<string>();
+
+    public IReadOnlyDictionary<string, object?> GetValues(RegistryRoot root, string path, IReadOnlyCollection<string> valueNames)
+    {
+        if (ThrowOnAccess) throw new Marco.Core.Wmi.WmiException(Marco.Core.Wmi.WmiFailureKind.AccessDenied, "no registry");
+        return KeyValues.TryGetValue($"{root}:{path}", out var v) ? v : new Dictionary<string, object?>();
+    }
 
     public void Dispose() { }
 }

@@ -94,6 +94,21 @@ public sealed partial class RemoteRegistry : IRemoteRegistry
         return key is null ? Array.Empty<string>() : key.GetSubKeyNames();
     }
 
+    public IReadOnlyDictionary<string, object?> GetValues(RegistryRoot root, string path, IReadOnlyCollection<string> valueNames)
+    {
+        EnsureConnected();
+        using var baseKey = OpenBase(root);
+        using var key = baseKey.OpenSubKey(path);
+        var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        if (key is null) return dict;
+        foreach (var vn in valueNames)
+        {
+            var v = key.GetValue(vn);
+            if (v is not null) dict[vn] = v;
+        }
+        return dict;
+    }
+
     public IReadOnlyList<RegistryKeyData> EnumerateSubkeys(
         RegistryRoot root, string path, IReadOnlyCollection<string> valueNames)
     {

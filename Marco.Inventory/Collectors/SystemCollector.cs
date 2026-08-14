@@ -61,6 +61,21 @@ public sealed class SystemCollector : IInventoryCollector
             machine.System.MotherboardManufacturer = board.GetString("Manufacturer");
             machine.System.MotherboardModel = board.GetString("Product");
         }
+
+        // Last person to sign in (shown when nobody is currently logged on). From LogonUI in the registry —
+        // best-effort, since it needs the Remote Registry service; a failure must not fail the System collector.
+        try
+        {
+            var logonUi = context.Registry.GetValues(RegistryRoot.LocalMachine,
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI",
+                new[] { "LastLoggedOnUser", "LastLoggedOnDisplayName" });
+            var last = (logonUi.TryGetValue("LastLoggedOnUser", out var u) ? u as string : null)?.Trim();
+            if (string.IsNullOrWhiteSpace(last))
+                last = (logonUi.TryGetValue("LastLoggedOnDisplayName", out var d) ? d as string : null)?.Trim();
+            if (!string.IsNullOrWhiteSpace(last))
+                machine.System.LastLoggedOnUser = last;
+        }
+        catch { /* Remote Registry unavailable — current-user (WMI) still populated above */ }
     }
 
     private static string? DescribeChassis(object? chassisTypes)
