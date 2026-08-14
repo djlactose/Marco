@@ -103,15 +103,15 @@ public sealed class Machine : ObservableBase
         IpAddresses.Add(address);
     }
 
-    /// <summary>Raise change notifications for all inventory-populated collections and computed fields, so the
-    /// detail view re-renders after a background inventory pass completes. Safe to call from any thread — WPF
-    /// marshals the resulting binding updates to the dispatcher.</summary>
+    /// <summary>Force a full re-read of this machine's row and detail after a background inventory pass. Must be
+    /// invoked on the UI thread: inventory sets scalar and nested fields (System.*, Os.*, RAM, Status) and fills
+    /// list fields on worker threads, and cross-thread per-property notifications don't reliably refresh an
+    /// already-bound row — so we re-raise everything, including the System/Os sub-objects, in one shot.</summary>
     public void NotifyInventoryUpdated()
     {
-        Raise(nameof(PrimaryMac)); Raise(nameof(IpList)); Raise(nameof(OpenPortsDisplay));
-        Raise(nameof(Cpus)); Raise(nameof(MemoryModules)); Raise(nameof(Disks)); Raise(nameof(Volumes));
-        Raise(nameof(Adapters)); Raise(nameof(Software)); Raise(nameof(Hotfixes)); Raise(nameof(Antivirus));
-        Raise(nameof(Printers)); Raise(nameof(UsbDevices)); Raise(nameof(Collectors));
+        System.RaiseAll();
+        Os.RaiseAll();
+        RaiseAll();
     }
 
     /// <summary>Record (or update) a collector's outcome, keyed by name.</summary>

@@ -25,4 +25,10 @@ public abstract class ObservableBase : INotifyPropertyChanged
 
     protected void Raise([CallerMemberName] string? name = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+    /// <summary>Signal that every property may have changed (the INPC empty-string convention), forcing all bound
+    /// controls to re-read. Used to refresh a row on the UI thread after a background inventory pass, where relying
+    /// on individual cross-thread notifications is unreliable.</summary>
+    public void RaiseAll()
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
 }
