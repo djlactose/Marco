@@ -185,7 +185,9 @@ public partial class MainViewModel : ObservableObject
             await Task.Run(() => _controller.RunDiscoveryAsync(
                 targets, settings, targets.Count, IncludeUnreachable,
                 m => _pending.Enqueue(m), progress, _pause, _cts.Token));
-            StatusLine = $"Done. {AliveCount:N0} alive, {UnreachableCount:N0} unreachable.";
+            StatusLine = AliveCount > 0
+                ? $"Discovery done: {AliveCount:N0} alive, {UnreachableCount:N0} unreachable. Now click ‘Inventory alive’ to pull system/software details."
+                : $"Discovery done: 0 alive, {UnreachableCount:N0} unreachable.";
             _runLog.ScanFinished(AliveCount, UnreachableCount, sw.Elapsed.TotalSeconds);
         }
         catch (OperationCanceledException)
