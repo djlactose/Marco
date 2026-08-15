@@ -98,6 +98,46 @@ public class ExportTests
     }
 
     [Fact]
+    public void Json_OldFormatWithoutSchemaVersion_StillDeserializes()
+    {
+        // A pre-1.1.0 export: no SchemaVersion property, hardcoded "1.0" app version.
+        const string oldJson = """
+        {
+          "Metadata": {
+            "Timestamp": "2026-01-01T10:00:00",
+            "Operator": "tester",
+            "RangesScanned": ["10.0.0.0/24"],
+            "TotalTargets": 1,
+            "AliveCount": 1,
+            "Tool": "Marco",
+            "Version": "1.0"
+          },
+          "Machines": []
+        }
+        """;
+        var doc = new JsonExporter().Deserialize(oldJson);
+
+        Assert.Equal("1.0", doc.Metadata.Version);
+        Assert.Equal("1", doc.Metadata.SchemaVersion); // record default fills the missing property
+        Assert.Empty(doc.ToMachines());
+    }
+
+    [Fact]
+    public void Metadata_AppVersion_LandsInScanInfo()
+    {
+        var meta = new ScanMetadata(new DateTime(2026, 1, 1, 10, 0, 0), "tester",
+            new[] { "10.0.0.0/24" }, 1, 1, Version: "9.9.9-beta.7");
+        var dir = Path.Combine(Path.GetTempPath(), "marco-test-" + Guid.NewGuid().ToString("N")[..8]);
+        try
+        {
+            new CsvExporter().Export(ScanDocument.From(meta, new[] { SampleMachine() }), dir);
+            var info = File.ReadAllText(Path.Combine(dir, "scan-info.txt"));
+            Assert.Contains("9.9.9-beta.7", info);
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+
+    [Fact]
     public void Csv_SoftwareCompanion_KeyedByMachine()
     {
         var dir = Path.Combine(Path.GetTempPath(), "marco-test-" + Guid.NewGuid().ToString("N")[..8]);

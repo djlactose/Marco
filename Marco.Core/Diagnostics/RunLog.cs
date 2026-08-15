@@ -31,6 +31,13 @@ public sealed class RunLog
 
     public void Note(string message) => Write("note", new { message });
 
+    /// <summary>Auto-update lifecycle: check_started, up_to_date, available, staged, sha_mismatch, check_failed,
+    /// applied, apply_failed, rollback, notify_only, cleanup.</summary>
+    public void UpdateEvent(string stage, string detail) => Write("update", new { stage, detail });
+
+    /// <summary>Unhandled exception, from the dispatcher, appdomain, or task scheduler.</summary>
+    public void Crash(string source, string detail) => Write("crash", new { source, detail });
+
     private void Write(string @event, object data)
     {
         var entry = new

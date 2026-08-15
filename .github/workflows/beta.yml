@@ -1,0 +1,88 @@
+name: Beta release
+
+on:
+  push:
+    branches: [develop]
+
+concurrency:
+  group: beta-build
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  beta:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Test
+        run: dotnet test Marco.sln -c Release
+
+      - name: Compute beta version
+        id: ver
+        shell: pwsh
+        run: |
+          $xml = [xml](Get-Content Directory.Build.props)
+          $base = ($xml.Project.PropertyGroup.Version | Select-Object -First 1).Trim()
+          $ver = "$base-beta.${{ github.run_number }}"
+          Write-Host "Beta version: $ver"
+          "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Publish
+        shell: pwsh
+        run: ./build/publish.ps1 -Version "${{ steps.ver.outputs.version }}"
+
+      # Dormant until CODESIGN_PFX_B64 / CODESIGN_PFX_PASSWORD secrets are added; then it signs every build.
+      - name: Sign (when cert secrets are configured)
+        shell: pwsh
+        env:
+          CODESIGN_PFX_B64: ${{ secrets.CODESIGN_PFX_B64 }}
+          CODESIGN_PFX_PASSWORD: ${{ secrets.CODESIGN_PFX_PASSWORD }}
+        run: |
+          if (-not $env:CODESIGN_PFX_B64) {
+            Write-Host "No signing cert configured - skipping (this release will be unsigned)."
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CODESIGN_PFX_B64))
+          try { ./build/sign.ps1 -PfxPath $pfx -PfxPassword $env:CODESIGN_PFX_PASSWORD }
+          finally { Remove-Item $pfx -Force -ErrorAction SilentlyContinue }
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: artifacts/publish/Marco.exe
+
+      - name: Create pre-release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ver = "${{ steps.ver.outputs.version }}"
+          gh release create "v$ver" artifacts/publish/Marco.exe artifacts/publish/Marco.exe.sha256 `
+            --prerelease --title "Marco v$ver" --generate-notes --target $env:GITHUB_SHA
+
+      - name: Prune old beta pre-releases
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $keep = 5
+          $releases = gh release list --limit 100 --json tagName,isPrerelease,createdAt | ConvertFrom-Json
+          $betas = @($releases | Where-Object { $_.isPrerelease } | Sort-Object createdAt -Descending)
+          if ($betas.Count -gt $keep) {
+            $betas | Select-Object -Skip $keep | ForEach-Object {
+              Write-Host "Deleting old pre-release $($_.tagName)"
+              gh release delete $_.tagName --cleanup-tag --yes
+            }
+          } else {
+            Write-Host "Nothing to prune ($($betas.Count) pre-releases, keeping up to $keep)."
+          }

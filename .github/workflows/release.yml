@@ -1,0 +1,82 @@
+name: Stable release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-build
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Read version
+        id: ver
+        shell: pwsh
+        run: |
+          $xml = [xml](Get-Content Directory.Build.props)
+          $ver = ($xml.Project.PropertyGroup.Version | Select-Object -First 1).Trim()
+          Write-Host "Release version: $ver"
+          "version=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Refuse to re-release an existing tag
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ver = "${{ steps.ver.outputs.version }}"
+          git fetch --tags --quiet
+          if (git tag -l "v$ver") {
+            Write-Error "Tag v$ver already exists. Bump <Version> in Directory.Build.props before pushing to main."
+            exit 1
+          }
+
+      - name: Test
+        run: dotnet test Marco.sln -c Release
+
+      - name: Publish
+        shell: pwsh
+        run: ./build/publish.ps1
+
+      # Dormant until CODESIGN_PFX_B64 / CODESIGN_PFX_PASSWORD secrets are added; then it signs every build.
+      - name: Sign (when cert secrets are configured)
+        shell: pwsh
+        env:
+          CODESIGN_PFX_B64: ${{ secrets.CODESIGN_PFX_B64 }}
+          CODESIGN_PFX_PASSWORD: ${{ secrets.CODESIGN_PFX_PASSWORD }}
+        run: |
+          if (-not $env:CODESIGN_PFX_B64) {
+            Write-Host "No signing cert configured - skipping (this release will be unsigned)."
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CODESIGN_PFX_B64))
+          try { ./build/sign.ps1 -PfxPath $pfx -PfxPassword $env:CODESIGN_PFX_PASSWORD }
+          finally { Remove-Item $pfx -Force -ErrorAction SilentlyContinue }
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: artifacts/publish/Marco.exe
+
+      - name: Create release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ver = "${{ steps.ver.outputs.version }}"
+          gh release create "v$ver" artifacts/publish/Marco.exe artifacts/publish/Marco.exe.sha256 `
+            --title "Marco v$ver" --generate-notes --target $env:GITHUB_SHA

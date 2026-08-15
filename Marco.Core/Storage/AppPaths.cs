@@ -53,6 +53,7 @@ public sealed class AppPaths
     public string LogsDirectory => Sub("logs");
     public string ScansDirectory => Sub("scans");
     public string ExportsDirectory => Sub("exports");
+    public string UpdatesDirectory => Sub("updates");
 
     public string LogFile => Path.Combine(LogsDirectory, "marco.log");
     public string RunLogFile => Path.Combine(LogsDirectory, "runlog.jsonl");

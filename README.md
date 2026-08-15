@@ -1,5 +1,8 @@
 # Marco — Agentless Network Inventory
 
+[![Buy Me a Coffee](https://img.shields.io/badge/☕_Buy_me_a_coffee-djlactose-yellow)](https://buymeacoffee.com/djlactose)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 Marco is a standalone Windows desktop tool for **agentless** discovery and deep hardware/software inventory of
 Windows machines on networks you are **authorized to administer**. It scans IP ranges, classifies live devices
 (Windows PC/server, printer, network gear, Unix/Linux), and for reachable Windows hosts pulls a detailed
@@ -40,9 +43,12 @@ Data (settings, logs, the run log, credential profiles, saved scans) is written 
 `Marco.Data\` folder beside the exe when that location is writable (USB stick, unzipped folder), otherwise to
 `%LOCALAPPDATA%\Marco\`. The current location is shown in the app header.
 
-> **Credential profiles do not travel.** If you choose to save credential profiles, they are encrypted with
-> Windows DPAPI scoped to *your* account. A profile saved on one machine/account will **not** decrypt on another —
-> that is the intended security property, not a bug. Re-enter credentials on the new machine.
+> **Credential profiles do not travel.** Credential profiles are saved automatically (`credentials.dat`),
+> encrypted with Windows DPAPI scoped to *your* account. A profile saved on one machine/account will **not**
+> decrypt on another — that is the intended security property, not a bug. Re-enter credentials on the new machine.
+
+Scan options (targets, discovery toggles, concurrency, the beta-updates choice) persist in `settings.json` in the
+same data folder.
 
 ---
 
@@ -79,7 +85,9 @@ runtime extraction) instead of the single self-extracting exe.
 4. **Inventory** — select a host and **Inventory selected**, or **Inventory alive** for all live Windows hosts.
    The detail pane shows the full inventory; per-collector status is listed at the bottom.
 5. **Export** — **Export CSV** (a `machines.csv` plus keyed `software.csv` / `disks.csv` / `adapters.csv`) or
-   **Export JSON** (the full nested structure). Exports respect the current filter and include scan metadata.
+   **Export JSON** (the full nested structure). Exports respect the current filter and include scan metadata
+   (including the app version that produced them). **Open scan…** loads a previously exported JSON scan back
+   into the grid.
 
 ---
 
@@ -115,6 +123,30 @@ For authenticated inventory, each **target** needs:
 
 ---
 
+## Releases, versioning & auto-update
+
+Releases are built by GitHub Actions from two branches:
+
+- **`develop` → beta pre-releases.** Every push publishes a pre-release tagged `vX.Y.Z-beta.N` (N = the CI run
+  number). Only the newest five betas are kept.
+- **`main` → stable releases.** A push publishes a release tagged with the `<Version>` from
+  `Directory.Build.props` — the single source of truth for Marco's version. The workflow refuses to re-release
+  an existing tag, so bump `<Version>` on develop right after each stable release.
+
+Each release carries `Marco.exe`, its `Marco.exe.sha256`, and a **build provenance attestation** — anyone can
+verify an exe traces to this repository's CI with `gh attestation verify Marco.exe --repo djlactose/Marco`.
+
+**Auto-update.** On launch (and every 12 hours) Marco silently checks GitHub Releases, downloads a newer exe in
+the background, verifies its SHA-256 against the published checksum, and stages it. A header link offers
+"restart to apply"; otherwise the staged update is applied automatically at the next launch. Updates are never
+applied mid-session without a click, a failed update rolls back automatically (crash-loop sentinel + the kept
+`.old` exe), and every step is recorded in the run log. The **Include beta (pre-release) updates** checkbox
+(left panel, "About & updates") selects the channel; by default a beta build follows betas and a stable build
+follows stable. Set the environment variable **`MARCO_NO_UPDATE=1`** to disable the updater entirely (e.g. via
+GPO/SCCM for managed fleets).
+
+---
+
 ## EDR / code signing
 
 An unsigned executable that prompts for admin credentials and sweeps a subnet is, behaviorally, indistinguishable
@@ -122,6 +154,12 @@ from malware — EDR products will quarantine it, and single-file .NET self-extr
 trigger. **Sign the release** (`build\sign.ps1`, timestamped) with a certificate from a reputable CA. Each release
 ships a `Marco.exe.sha256` for verification. If your org's tooling still flags the signed binary, add an EDR
 exclusion for it by path/hash.
+
+CI builds are currently **unsigned**: the release workflows contain a dormant signing step that activates when
+the `CODESIGN_PFX_B64` / `CODESIGN_PFX_PASSWORD` repository secrets are added (base64-encoded PFX + password).
+Once the project has published releases, [SignPath Foundation](https://signpath.org) offers free Authenticode
+signing for open-source projects and is the intended path to signed CI builds. Until then, the SHA-256 checksums
+and provenance attestations are the verification story.
 
 ---
 
@@ -131,8 +169,11 @@ exclusion for it by path/hash.
 - No agents, no persistence, no data exfiltration — inventory data is read and displayed locally.
 - Credentials live in memory as `SecureString`, are persisted only under DPAPI (your account) if you opt in, and
   are **never** written to disk in plaintext, to logs, or to exports.
-- The only outbound (internet) call in the product is an optional, clearly-labelled public-IP lookup — **off by
-  default** and not built in this phase.
+- Outbound (internet) calls: on launch and every 12 hours Marco checks
+  `api.github.com/repos/djlactose/Marco` for a newer release over HTTPS and, when one exists, downloads it from
+  GitHub and verifies it against the published SHA-256 before it is ever run. **No scan or inventory data is
+  sent anywhere** — the request carries only a `Marco/<version>` user agent. Failures are silent (logged to the
+  run log) so blocked networks lose nothing. Set `MARCO_NO_UPDATE=1` to disable all outbound calls.
 - A local **run log** (`Marco.Data\logs\runlog.jsonl`) records targets, timestamps, operator, and success/failure
   counts for access attribution — never credentials.
 
@@ -141,12 +182,13 @@ exclusion for it by path/hash.
 ## Project layout
 
 ```
-Marco.Core/         domain model, ScanController, InventoryRunner, all interfaces (BCL only)
+Marco.Core/         domain model, ScanController, InventoryRunner, auto-update pipeline, all interfaces (BCL only)
 Marco.Discovery/    liveness, DNS/NBNS naming, ARP, OUI table, device classifier
 Marco.Inventory/    IWmiSession (System.Management), collectors, remote registry
 Marco.Credentials/  credential sets, DPAPI persistence, per-host mapping
 Marco.Export/       CSV / JSON writers + reopenable scan document
 Marco.App/          WPF UI (MVVM)
-Marco.Tests/        xUnit (103 tests)
+Marco.Tests/        xUnit
 build/              publish.ps1, sign.ps1, refresh-oui.ps1
+.github/            CI: PR tests, beta releases (develop), stable releases (main), dependabot
 ```

@@ -22,7 +22,9 @@ param(
     [string]$Configuration = "Release",
     [string]$Runtime = "win-x64",
     [switch]$NoExtract,
-    [string]$OutputDir = "$PSScriptRoot\..\artifacts"
+    [string]$OutputDir = "$PSScriptRoot\..\artifacts",
+    # Overrides the version from Directory.Build.props (CI passes X.Y.Z-beta.N for develop builds).
+    [string]$Version
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,10 +35,11 @@ Write-Host "Publishing Marco ($Configuration, $Runtime, single-file, self-contai
 
 $props = @(
     "-p:PublishSingleFile=true",
-    "-p:EnableCompressionInSingleFile=false",   # size is irrelevant; off = faster cold start
+    "-p:EnableCompressionInSingleFile=true",    # auto-update downloads every release per machine, so size matters more than the slightly slower first launch
     "-p:DebugType=embedded",
     "-p:SatelliteResourceLanguages=en"
 )
+if ($Version) { $props += "-p:Version=$Version" }
 if ($NoExtract) {
     Write-Host "  (multi-file: WPF native libs emitted beside the exe, no runtime extraction)" -ForegroundColor Yellow
 } else {

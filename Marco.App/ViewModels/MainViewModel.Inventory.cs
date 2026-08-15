@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.Input;
 using Marco.App.Services;
@@ -45,6 +46,7 @@ public partial class MainViewModel
         {
             _credentials.Add(set);
             Credentials.Add(new CredentialDisplay(set));
+            SaveCredentials();
             StatusLine = $"Added credential '{set.Label}'.";
         }
     }
@@ -55,6 +57,7 @@ public partial class MainViewModel
         if (display is null) return;
         _credentials.Remove(display.Set);
         Credentials.Remove(display);
+        SaveCredentials();
     }
 
     [RelayCommand(CanExecute = nameof(CanMutateCredentials))]
@@ -71,8 +74,36 @@ public partial class MainViewModel
             _credentials.Replace(display.Set, updated);
             var index = Credentials.IndexOf(display);
             if (index >= 0) Credentials[index] = new CredentialDisplay(updated);
+            SaveCredentials();
             StatusLine = $"Updated credential '{updated.Label}'.";
         }
+    }
+
+    /// <summary>Restore saved credential profiles (DPAPI CurrentUser). A profile sealed by a different
+    /// account/machine won't decrypt — that's the intended security property; tell the operator and move on.</summary>
+    private void LoadCredentials()
+    {
+        try
+        {
+            _credentials.Load(_paths.CredentialsFile);
+            foreach (var set in _credentials.Sets)
+                Credentials.Add(new CredentialDisplay(set));
+        }
+        catch (CredentialDecryptException ex)
+        {
+            _runLog.Note($"Saved credentials could not be decrypted: {ex.Message}");
+            StatusLine = "Saved credential profiles could not be decrypted (different account/machine); re-enter them.";
+        }
+        catch (Exception ex)
+        {
+            _runLog.Note($"Credential load failed: {ex.Message}");
+        }
+    }
+
+    private void SaveCredentials()
+    {
+        try { _credentials.Save(_paths.CredentialsFile); }
+        catch (Exception ex) { _runLog.Note($"Credential save failed: {ex.Message}"); }
     }
 
     // Mutating credentials mid-run could dispose a SecureString a connect is actively using.
@@ -83,6 +114,7 @@ public partial class MainViewModel
         AddCredentialCommand.NotifyCanExecuteChanged();
         RemoveCredentialCommand.NotifyCanExecuteChanged();
         EditCredentialCommand.NotifyCanExecuteChanged();
+        OpenScanCommand.NotifyCanExecuteChanged();
     }
 
     private IReadOnlyList<CredentialCandidate> ResolveCandidates()
@@ -215,9 +247,48 @@ public partial class MainViewModel
             : Machines;
         var machines = source.ToList();
         var meta = new ScanMetadata(DateTime.Now, Environment.UserName, _lastRanges,
-            machines.Count, machines.Count(m => m.IsAlive));
+            machines.Count, machines.Count(m => m.IsAlive), Version: Marco.Core.AppVersion.Display);
         return ScanDocument.From(meta, machines);
     }
+
+    /// <summary>Reload a previously exported JSON scan into the grid (the ScanDocument round-trip the export
+    /// format was designed for).</summary>
+    [RelayCommand(CanExecute = nameof(CanOpenScan))]
+    private void OpenScan()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Open a saved scan",
+            Filter = "JSON scan files (*.json)|*.json|All files (*.*)|*.*",
+            InitialDirectory = _paths.ExportsDirectory,
+            CheckFileExists = true,
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            var doc = new JsonExporter().Load(dialog.FileName);
+            Machines.Clear();
+            SelectedMachine = null;
+            foreach (var machine in doc.ToMachines())
+                Machines.Add(machine);
+
+            AliveCount = Machines.Count(m => m.IsAlive);
+            UnreachableCount = Machines.Count - AliveCount;
+            TotalCount = doc.Metadata.TotalTargets > 0 ? doc.Metadata.TotalTargets : Machines.Count;
+            _lastRanges = doc.Metadata.RangesScanned?.ToList() ?? new List<string>();
+            ProgressFraction = 0;
+            StatusLine = $"Loaded scan from {Path.GetFileName(dialog.FileName)} ({doc.Metadata.Timestamp:g}).";
+            InventoryAliveCommand.NotifyCanExecuteChanged();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Could not open the scan:\n{ex.Message}",
+                "Open scan", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private bool CanOpenScan() => !IsScanning;
 
     [RelayCommand]
     private void ExportJson()

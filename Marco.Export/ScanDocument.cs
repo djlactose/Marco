@@ -2,7 +2,9 @@ using Marco.Core.Model;
 
 namespace Marco.Export;
 
-/// <summary>Scan-level metadata embedded in every export, for provenance.</summary>
+/// <summary>Scan-level metadata embedded in every export, for provenance. <paramref name="Version"/> is the app
+/// version that produced the export ("0.0" for pre-versioning exports); <paramref name="SchemaVersion"/> tracks
+/// the document format itself, independent of app releases.</summary>
 public sealed record ScanMetadata(
     DateTime Timestamp,
     string? Operator,
@@ -10,7 +12,8 @@ public sealed record ScanMetadata(
     int TotalTargets,
     int AliveCount,
     string Tool = "Marco",
-    string Version = "1.0");
+    string Version = "0.0",
+    string SchemaVersion = "1");
 
 /// <summary>Serializable scan document (metadata + machines). Machines are projected to DTOs so JSON is clean and
 /// a saved scan can be reopened without depending on the observable model's constructors.</summary>

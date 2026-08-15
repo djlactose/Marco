@@ -75,12 +75,19 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _totalCount;
 
     public string StorageLocation => _paths.Reason;
-    public string Title => "Marco — Network Inventory";
+    public string Title => $"Marco — Network Inventory — v{Marco.Core.AppVersion.Display}";
 
-    public MainViewModel()
+    public MainViewModel() : this(null) { }
+
+    public MainViewModel(AppPaths? paths, RunLog? runLog = null, AppSettings? settings = null,
+        Marco.Core.Update.UpdateService? updater = null)
     {
-        _paths = AppPaths.Resolve();
-        _runLog = new RunLog(_paths.RunLogFile);
+        _paths = paths ?? AppPaths.Resolve();
+        _runLog = runLog ?? new RunLog(_paths.RunLogFile);
+        _updater = updater;
+
+        ApplySettings(settings ?? SettingsStore.Load(_paths.SettingsFile));
+        LoadCredentials();
 
         foreach (var net in Marco.Discovery.LocalNetworks.Enumerate())
             SuggestedNetworks.Add(net);
@@ -94,6 +101,41 @@ public partial class MainViewModel : ObservableObject
         };
         _flushTimer.Tick += (_, _) => FlushPending();
     }
+
+    /// <summary>Seed the observable backing fields directly: during construction nothing observes yet, and the
+    /// generated setters must NOT run — OnIncludeBetaUpdatesChanged would persist an explicit channel choice the
+    /// operator never made.</summary>
+#pragma warning disable MVVMTK0034
+    private void ApplySettings(AppSettings s)
+    {
+        _targetsText = s.TargetsText;
+        _concurrency = s.Concurrency;
+        _icmpEnabled = s.IcmpEnabled;
+        _tcpFallback = s.TcpFallback;
+        _classification = s.Classification;
+        _resolveNames = s.ResolveNames;
+        _resolveMac = s.ResolveMac;
+        _includeUnreachable = s.IncludeUnreachable;
+        _autoInventory = s.AutoInventory;
+        _includeBetaSetting = s.IncludeBetaUpdates;
+        _includeBetaUpdates = s.IncludeBetaUpdates ?? Marco.Core.AppVersion.IsBeta;
+    }
+#pragma warning restore MVVMTK0034
+
+    /// <summary>Persist current options; called on exit and immediately when the beta toggle changes.</summary>
+    public void SaveSettings() => SettingsStore.Save(_paths.SettingsFile, new AppSettings
+    {
+        IncludeBetaUpdates = _includeBetaSetting,
+        TargetsText = TargetsText,
+        Concurrency = Concurrency,
+        IcmpEnabled = IcmpEnabled,
+        TcpFallback = TcpFallback,
+        Classification = Classification,
+        ResolveNames = ResolveNames,
+        ResolveMac = ResolveMac,
+        IncludeUnreachable = IncludeUnreachable,
+        AutoInventory = AutoInventory,
+    });
 
     partial void OnFilterTextChanged(string value) => MachinesView.Refresh();
 

@@ -21,10 +21,31 @@
           <TextBlock Text="Agentless network discovery &amp; inventory — for networks you are authorized to administer."
                      Foreground="#DCEAF6" FontSize="12" />
         </StackPanel>
-        <TextBlock Text="{Binding StorageLocation}" Foreground="#CFE2F3" FontSize="11"
-                   HorizontalAlignment="Right" VerticalAlignment="Bottom" TextTrimming="CharacterEllipsis"
-                   MaxWidth="520" ToolTip="{Binding StorageLocation}" />
+        <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom">
+          <TextBlock HorizontalAlignment="Right" FontSize="11" Margin="0,0,0,2"
+                     Visibility="{Binding UpdateAvailable, Converter={StaticResource BoolToVis}}">
+            <Hyperlink Command="{Binding RestartToUpdateCommand}" Foreground="#FFE9A0">
+              <Run Text="{Binding UpdateText, Mode=OneWay}" />
+            </Hyperlink>
+          </TextBlock>
+          <TextBlock Text="{Binding StorageLocation}" Foreground="#CFE2F3" FontSize="11"
+                     HorizontalAlignment="Right" TextTrimming="CharacterEllipsis"
+                     MaxWidth="520" ToolTip="{Binding StorageLocation}" />
+        </StackPanel>
       </Grid>
+    </Border>
+
+    <!-- Post-update "What's new" banner (shown once after an update applies) -->
+    <Border DockPanel.Dock="Top" Background="#FFF8E1" BorderBrush="#E6D28C" BorderThickness="0,0,0,1" Padding="12,4"
+            Visibility="{Binding WhatsNewVisible, Converter={StaticResource BoolToVis}}">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="✕" Padding="6,0" MinWidth="0" Margin="8,0,0,0"
+                ToolTip="Dismiss" Command="{Binding DismissWhatsNewCommand}" />
+        <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+          <Run Text="{Binding WhatsNewText, Mode=OneWay}" />
+          <Hyperlink Command="{Binding OpenWhatsNewCommand}">What's new</Hyperlink>
+        </TextBlock>
+      </DockPanel>
     </Border>
 
     <!-- Status bar -->
@@ -188,6 +209,22 @@
               <Button Content="Clear" Command="{Binding ClearResultsCommand}"
                       IsEnabled="{Binding IsScanning, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
             </WrapPanel>
+
+            <Separator Margin="0,14" />
+
+            <TextBlock Text="About &amp; updates" Style="{StaticResource SectionHeader}" />
+            <TextBlock Text="{Binding VersionDisplay}" Foreground="{StaticResource MutedBrush}" FontSize="11" />
+            <CheckBox Content="Include beta (pre-release) updates" IsChecked="{Binding IncludeBetaUpdates}" Margin="0,8,0,3"
+                      ToolTip="Checked: update to the newest beta build (develop branch). Unchecked: stable releases only." />
+            <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+              <TextBlock FontSize="11">
+                <Hyperlink Command="{Binding CheckForUpdatesNowCommand}">Check for updates now</Hyperlink>
+              </TextBlock>
+              <TextBlock Text="{Binding UpdateCheckStatus}" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="8,0,0,0" />
+            </StackPanel>
+            <TextBlock FontSize="11" Margin="0,8,0,0">
+              <Hyperlink Command="{Binding OpenBuyMeACoffeeCommand}">☕ Buy me a coffee</Hyperlink>
+            </TextBlock>
           </StackPanel>
         </ScrollViewer>
       </Border>
@@ -219,6 +256,8 @@
               <Button Content="Inventory alive" Command="{Binding InventoryAliveCommand}"
                       Background="{StaticResource AccentBrush}" Foreground="White" />
               <Separator Style="{x:Null}" Width="1" Background="{StaticResource BorderBrush}" Margin="6,2" />
+              <Button Content="Open scan…" Command="{Binding OpenScanCommand}"
+                      ToolTip="Load a previously exported JSON scan back into the grid" />
               <Button Content="Export CSV" Command="{Binding ExportCsvCommand}" />
               <Button Content="Export JSON" Command="{Binding ExportJsonCommand}" />
             </StackPanel>
