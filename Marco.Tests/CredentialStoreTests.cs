@@ -116,6 +116,54 @@ public class CredentialStoreTests
     }
 
     [Fact]
+    public void ReloadIfChanged_PicksUpAnotherInstancesSave_ThenIsIdempotent()
+    {
+        // Two stores on one file = two Marco windows sharing credentials.dat.
+        var path = Path.Combine(Path.GetTempPath(), "marco-cred-" + Guid.NewGuid().ToString("N")[..8] + ".dat");
+        try
+        {
+            using var windowA = new CredentialStore();
+            using var windowB = new CredentialStore();
+            windowA.Add(new CredentialSet("A", "CORP", "a", null));
+            windowA.Save(path);
+            windowB.Load(path);
+
+            Assert.False(windowB.ReloadIfChanged(path)); // nothing changed since B loaded
+
+            windowA.Add(new CredentialSet("A2", "CORP", "a2", null));
+            windowA.Save(path);
+
+            Assert.True(windowB.ReloadIfChanged(path));   // A's save is picked up...
+            Assert.Equal(new[] { "A", "A2" }, windowB.Sets.Select(s => s.Label));
+            Assert.False(windowB.ReloadIfChanged(path));  // ...exactly once
+
+            // B's own save then counts as "seen" too.
+            windowB.Add(new CredentialSet("B", "CORP", "b", null));
+            windowB.Save(path);
+            Assert.False(windowB.ReloadIfChanged(path));
+            Assert.True(windowA.ReloadIfChanged(path));
+            Assert.Equal(3, windowA.Sets.Count);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact]
+    public void Save_IsAtomic_LeavesNoTempFile()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "marco-cred-" + Guid.NewGuid().ToString("N")[..8] + ".dat");
+        try
+        {
+            using var store = new CredentialStore();
+            store.Add(CredentialSet.CurrentToken("Session"));
+            store.Save(path);
+            store.Save(path); // overwrite path must work too
+            Assert.True(File.Exists(path));
+            Assert.False(File.Exists(path + ".tmp"));
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact]
     public void Replace_KeepsTryOrderPosition()
     {
         using var store = new CredentialStore();

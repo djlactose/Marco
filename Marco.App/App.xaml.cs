@@ -5,31 +5,18 @@ using Marco.App.ViewModels;
 using Marco.App.Views;
 using Marco.Core.Diagnostics;
 using Marco.Core.Storage;
+using Marco.Core.Update;
 
 namespace Marco.App;
 
 public partial class App : Application
 {
-    private Mutex? _instanceMutex;
     private RunLog? _runLog;
     private MainViewModel? _viewModel;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-
-        // Single instance. The 5s wait bridges the update-relaunch handoff, where the old process may still be
-        // exiting while it hands the mutex over to the freshly swapped exe.
-        _instanceMutex = new Mutex(initiallyOwned: false, "Marco.App.SingleInstance");
-        bool owned;
-        try { owned = _instanceMutex.WaitOne(TimeSpan.FromSeconds(5)); }
-        catch (AbandonedMutexException) { owned = true; } // previous holder died without releasing — we own it now
-        if (!owned)
-        {
-            MessageBox.Show("Marco is already running.", "Marco", MessageBoxButton.OK, MessageBoxImage.Information);
-            Shutdown();
-            return;
-        }
 
         var paths = AppPaths.Resolve();
         _runLog = new RunLog(paths.RunLogFile);
@@ -38,10 +25,20 @@ public partial class App : Application
         var settings = SettingsStore.Load(paths.SettingsFile);
         var updater = UpdateBootstrap.Create(paths, _runLog, settings);
 
-        if (updater is not null)
+        // Any number of Marco windows may run at once (one per network is a normal way to work). Only the steps
+        // that touch the exe or the crash-loop sentinel are serialised, through a short-lived cross-process gate
+        // held from here until the window is up. The 5 s wait bridges the update-relaunch handoff, where the old
+        // process may still be exiting; if another instance holds the gate longer than that, this one simply
+        // skips the startup update steps and opens normally — it never refuses to start.
+        using var gate = updater is null ? null : UpdateGate.TryAcquire(paths.Root, TimeSpan.FromSeconds(5));
+        bool runStartupUpdateSteps = updater is not null && gate is not null;
+        if (updater is not null && gate is null)
+            _runLog.UpdateEvent("gate_busy", "another Marco instance is starting or applying an update; startup update steps skipped");
+
+        if (runStartupUpdateSteps)
         {
             // Order matters: detect a crash-looping update (and roll back) before applying anything new.
-            if (updater.CheckForFailedUpdate()) { Shutdown(); return; }
+            if (updater!.CheckForFailedUpdate()) { Shutdown(); return; }
             if (updater.TryApplyStagedAndRelaunch()) { Shutdown(); return; }
         }
 
@@ -50,19 +47,20 @@ public partial class App : Application
         MainWindow = window;
         window.Show();
 
-        if (updater is not null)
+        if (runStartupUpdateSteps)
         {
-            updater.MarkStartupSucceeded();
+            // Still under the gate: a second new-version instance launched right now must not see the bumped
+            // sentinel and mistake a healthy start for a crash loop.
+            updater!.MarkStartupSucceeded();
             _ = Task.Run(updater.CleanupArtifacts);
-            _viewModel.StartBackgroundUpdateCheck();
         }
+        if (updater is not null)
+            _viewModel.StartBackgroundUpdateCheck();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
         _viewModel?.SaveSettings();
-        try { _instanceMutex?.ReleaseMutex(); } catch { }
-        _instanceMutex?.Dispose();
         base.OnExit(e);
     }
 

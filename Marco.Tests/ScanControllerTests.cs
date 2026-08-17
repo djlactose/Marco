@@ -195,5 +195,148 @@ public class ScanControllerTests
         Assert.Equal(3, last.Completed);
         Assert.Equal(2, last.Alive);
         Assert.Equal(1, last.Unreachable);
+        Assert.Equal(0, last.InFlight);
+    }
+
+    // --- In-flight tracking, pause semantics, cancel settling ------------------------------------------------
+
+    /// <summary>A probe gate per address: hosts sit "in flight" until the test releases them.</summary>
+    private sealed class ProbeGates
+    {
+        private readonly ConcurrentDictionary<string, TaskCompletionSource> _gates = new();
+        public TaskCompletionSource For(string address)
+            => _gates.GetOrAdd(address, _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+        public Task WaitAsync(string address, CancellationToken ct)
+            => For(address).Task.WaitAsync(ct);
+        public void Release(string address) => For(address).TrySetResult();
+        public void ReleaseAll() { foreach (var g in _gates.Values) g.TrySetResult(); }
+        public int Waiting => _gates.Values.Count(g => !g.Task.IsCompleted);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 3000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline) throw new TimeoutException("condition not met in time");
+            await Task.Delay(10);
+        }
+    }
+
+    [Fact]
+    public async Task Progress_ReportsInFlight_WhileHostsAreProbing()
+    {
+        var gates = new ProbeGates();
+        var liveness = new FakeLivenessProbe { BeforeProbe = gates.WaitAsync };
+        foreach (var a in new[] { "10.0.0.1", "10.0.0.2", "10.0.0.3" }) liveness.Alive.Add(a);
+
+        var progress = new SyncProgress<ScanProgress>();
+        var run = Build(liveness).RunDiscoveryAsync(
+            Targets("10.0.0.1", "10.0.0.2", "10.0.0.3"),
+            FastSettings(), 3, false, _ => { }, progress, null, default);
+
+        await WaitUntilAsync(() => liveness.Calls.Count == 3); // all three parked inside the probe
+        gates.Release("10.0.0.2");
+        await WaitUntilAsync(() => progress.Reports.Count > 0);
+
+        // The first report is the one host that finished; the other two are still in flight.
+        var first = progress.Reports[0];
+        Assert.Equal(1, first.Completed);
+        Assert.Equal(2, first.InFlight);
+
+        gates.ReleaseAll();
+        await run;
+        Assert.Equal(0, progress.Last!.InFlight);
+        Assert.Equal(ScanPhase.Complete, progress.Last.Phase);
+    }
+
+    [Fact]
+    public async Task Pause_ParksAliveHostsBeforeEnrichment_AndReportsZeroInFlight()
+    {
+        var gates = new ProbeGates();
+        var liveness = new FakeLivenessProbe { BeforeProbe = gates.WaitAsync };
+        var names = new FakeNameResolver();
+        var addrs = new[] { "10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4" };
+        foreach (var a in addrs) liveness.Alive.Add(a);
+
+        var emitted = new ConcurrentBag<Machine>();
+        var progress = new SyncProgress<ScanProgress>();
+        var pause = new PauseController();
+
+        var run = Build(liveness, names).RunDiscoveryAsync(
+            Targets(addrs), FastSettings(), 4, false, m => emitted.Add(m), progress, pause, default);
+
+        await WaitUntilAsync(() => liveness.Calls.Count == 4); // all four in flight (parked in the probe)
+        pause.Pause();
+        gates.ReleaseAll();                                     // liveness finishes; enrichment must NOT start
+
+        // Every host reports itself parked at the second gate: nothing completed, nothing in flight.
+        await WaitUntilAsync(() => progress.Reports.Any(p => p.InFlight == 0 && p.Completed == 0));
+        await Task.Delay(100);
+        Assert.Empty(names.Calls);
+        Assert.Empty(emitted);
+
+        pause.Resume();
+        await run;
+
+        Assert.Equal(4, emitted.Count);
+        Assert.Equal(4, names.Calls.Count);
+        Assert.Equal(4, progress.Last!.Alive);
+        Assert.Equal(0, progress.Last.InFlight);
+    }
+
+    [Fact]
+    public async Task Cancel_WhilePaused_ReturnsPromptly_WithSettledCounts()
+    {
+        var gates = new ProbeGates();
+        var liveness = new FakeLivenessProbe { BeforeProbe = gates.WaitAsync };
+        var addrs = new[] { "10.0.0.1", "10.0.0.2", "10.0.0.3" };
+        foreach (var a in addrs) liveness.Alive.Add(a);
+
+        var emitted = new ConcurrentBag<Machine>();
+        var progress = new SyncProgress<ScanProgress>();
+        var pause = new PauseController();
+        using var cts = new CancellationTokenSource();
+
+        var run = Build(liveness).RunDiscoveryAsync(
+            Targets(addrs), FastSettings(), 3, false, m => emitted.Add(m), progress, pause, cts.Token);
+
+        await WaitUntilAsync(() => liveness.Calls.Count == 3);
+        pause.Pause();
+        gates.ReleaseAll();
+        await WaitUntilAsync(() => progress.Reports.Any(p => p.InFlight == 0 && p.Completed == 0));
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        cts.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+        Assert.True(sw.ElapsedMilliseconds < 2000, $"cancel took {sw.ElapsedMilliseconds} ms");
+
+        var last = progress.Last!;
+        Assert.Equal(ScanPhase.Cancelled, last.Phase);
+        Assert.Equal(0, last.InFlight);
+        Assert.Equal(emitted.Count, last.Alive);
+    }
+
+    [Fact]
+    public async Task Cancel_MidSweep_FinalReportIsCancelledAndSettled()
+    {
+        var liveness = new FakeLivenessProbe { DelayMs = 50 };
+        var addrs = Enumerable.Range(1, 20).Select(i => $"10.0.0.{i}").ToArray();
+        foreach (var a in addrs) liveness.Alive.Add(a);
+
+        var emitted = new ConcurrentBag<Machine>();
+        var progress = new SyncProgress<ScanProgress>();
+        using var cts = new CancellationTokenSource();
+        progress.OnReport = p => { if (p.Completed >= 1) cts.Cancel(); };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            Build(liveness).RunDiscoveryAsync(
+                Targets(addrs), FastSettings(), 20, false, m => emitted.Add(m), progress, null, cts.Token));
+
+        var last = progress.Last!;
+        Assert.Equal(ScanPhase.Cancelled, last.Phase);
+        Assert.Equal(0, last.InFlight);
+        Assert.Equal(emitted.Count, last.Alive);
+        Assert.True(last.Completed < 20);
     }
 }

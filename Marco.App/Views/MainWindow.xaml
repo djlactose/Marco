@@ -186,16 +186,18 @@
 
             <Separator Margin="0,14" />
 
-            <WrapPanel>
-              <Button Content="Start" Command="{Binding StartScanCommand}"
+            <!-- Enablement is driven by each command's CanExecute (IsScanning / IsCancelling), not by IsEnabled
+                 bindings, so the buttons can never disagree with what a click would actually do. One row of four
+                 equal cells: at the panel's width a WrapPanel pushed Clear onto a second, easily-missed line. -->
+            <UniformGrid Rows="1" Columns="4">
+              <Button Content="Start" Command="{Binding StartScanCommand}" MinWidth="0" Padding="8,6"
                       Background="{StaticResource AccentBrush}" Foreground="White" FontWeight="SemiBold" />
-              <Button Command="{Binding PauseResumeCommand}"
-                      IsEnabled="{Binding IsScanning}">
+              <Button Command="{Binding PauseResumeCommand}">
                 <Button.Style>
                   <Style TargetType="Button">
-                    <Setter Property="Padding" Value="12,6" />
+                    <Setter Property="Padding" Value="8,6" />
                     <Setter Property="Margin" Value="0,0,6,0" />
-                    <Setter Property="MinWidth" Value="72" />
+                    <Setter Property="MinWidth" Value="0" />
                     <Setter Property="Content" Value="Pause" />
                     <Style.Triggers>
                       <DataTrigger Binding="{Binding IsPaused}" Value="True">
@@ -205,10 +207,9 @@
                   </Style>
                 </Button.Style>
               </Button>
-              <Button Content="Cancel" Command="{Binding CancelCommand}" IsEnabled="{Binding IsScanning}" />
-              <Button Content="Clear" Command="{Binding ClearResultsCommand}"
-                      IsEnabled="{Binding IsScanning, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
-            </WrapPanel>
+              <Button Content="Cancel" Command="{Binding CancelCommand}" MinWidth="0" Padding="8,6" />
+              <Button Content="Clear" Command="{Binding ClearResultsCommand}" MinWidth="0" Padding="8,6" Margin="0" />
+            </UniformGrid>
 
             <Separator Margin="0,14" />
 

@@ -13,6 +13,7 @@ public partial class MainViewModel
     private UpdateService? _updater;
     private bool? _includeBetaSetting;      // null until the operator explicitly toggles the checkbox
     private DispatcherTimer? _updateTimer;
+    private DispatcherTimer? _deferredRecheckTimer;
     private UpdateCheckResult? _lastUpdateResult;
     private string? _whatsNewUrl;
     private int _updateCheckInFlight;
@@ -77,6 +78,11 @@ public partial class MainViewModel
                 case UpdateState.UpToDate:
                     if (manual) UpdateCheckStatus = "Up to date.";
                     break;
+                case UpdateState.Deferred:
+                    // Another Marco window is downloading this release; it will be staged for us shortly.
+                    if (manual) UpdateCheckStatus = "Another Marco window is downloading this update.";
+                    ScheduleDeferredRecheck();
+                    break;
                 default:
                     if (manual) UpdateCheckStatus = "Check failed (see the run log).";
                     break;
@@ -86,6 +92,21 @@ public partial class MainViewModel
         {
             Interlocked.Exchange(ref _updateCheckInFlight, 0);
         }
+    }
+
+    /// <summary>One-shot re-check a couple of minutes after a Deferred result. A timer rather than a delay inside
+    /// RunUpdateCheckAsync, which would hold the in-flight flag and block a manual "Check now".</summary>
+    private void ScheduleDeferredRecheck()
+    {
+        if (_deferredRecheckTimer is not null) return;
+        _deferredRecheckTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(2) };
+        _deferredRecheckTimer.Tick += (_, _) =>
+        {
+            _deferredRecheckTimer?.Stop();
+            _deferredRecheckTimer = null;
+            _ = RunUpdateCheckAsync(null);
+        };
+        _deferredRecheckTimer.Start();
     }
 
     [RelayCommand]
@@ -106,6 +127,14 @@ public partial class MainViewModel
         if (_updater.TryApplyAndRestartNow())
         {
             Application.Current.Shutdown();
+        }
+        else if (_updater.ExeOnDiskIsNewer())
+        {
+            // Another Marco window already swapped the exe; this process keeps running the old image (from
+            // Marco.exe.old) until it is closed. Nothing left to apply here — just say so.
+            UpdateText = "Update applied by another Marco window — close and reopen Marco to use it";
+            UpdateAvailable = true;
+            _lastUpdateResult = null; // a further click has nothing to do
         }
         else
         {

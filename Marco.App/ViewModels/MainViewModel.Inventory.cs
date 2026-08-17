@@ -5,6 +5,7 @@ using Marco.App.Services;
 using Marco.App.Views;
 using Marco.Core.Inventory;
 using Marco.Core.Model;
+using Marco.Core.Scanning;
 using Marco.Core.Wmi;
 using Marco.Credentials;
 using Marco.Export;
@@ -44,6 +45,7 @@ public partial class MainViewModel
         };
         if (dialog.ShowDialog() == true && dialog.Result is { } set)
         {
+            SyncCredentialsFromDisk();
             _credentials.Add(set);
             Credentials.Add(new CredentialDisplay(set));
             SaveCredentials();
@@ -55,6 +57,11 @@ public partial class MainViewModel
     private void RemoveCredential(CredentialDisplay? display)
     {
         if (display is null) return;
+        if (SyncCredentialsFromDisk())
+        {
+            display = Relocate(display);
+            if (display is null) { StatusLine = "That credential was already removed by another Marco window."; return; }
+        }
         _credentials.Remove(display.Set);
         Credentials.Remove(display);
         SaveCredentials();
@@ -64,6 +71,13 @@ public partial class MainViewModel
     private void EditCredential(CredentialDisplay? display)
     {
         if (display is null) return;
+        // The dialog edits the live set, so pick up another window's changes before opening it. A save from the
+        // other window while the dialog is open is still last-writer-wins — accepted.
+        if (SyncCredentialsFromDisk())
+        {
+            display = Relocate(display);
+            if (display is null) { StatusLine = "That credential was removed by another Marco window."; return; }
+        }
         var dialog = new CredentialDialog(InventoryFactory.CreateVerifier(), SelectedMachine?.Address,
             display.Set.Kind, editing: display.Set)
         {
@@ -78,6 +92,41 @@ public partial class MainViewModel
             StatusLine = $"Updated credential '{updated.Label}'.";
         }
     }
+
+    /// <summary>Several Marco windows share credentials.dat. If another window saved since we last read or wrote
+    /// it, reload and rebuild the display list so our next save doesn't discard their edit. Returns true when the
+    /// list was replaced (callers holding a CredentialDisplay must <see cref="Relocate"/> it).</summary>
+    private bool SyncCredentialsFromDisk()
+    {
+        try
+        {
+            if (!_credentials.ReloadIfChanged(_paths.CredentialsFile)) return false;
+        }
+        catch (CredentialDecryptException ex)
+        {
+            _runLog.Note($"Credential reload failed: {ex.Message}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _runLog.Note($"Credential reload failed: {ex.Message}");
+            return false;
+        }
+        Credentials.Clear();
+        foreach (var set in _credentials.Sets)
+            Credentials.Add(new CredentialDisplay(set));
+        StatusLine = "Credential list refreshed (changed by another Marco window).";
+        return true;
+    }
+
+    /// <summary>After a reload, find the display entry that corresponds to a now-stale one: same label, kind and
+    /// user name. Null when the other window removed it.</summary>
+    private CredentialDisplay? Relocate(CredentialDisplay stale)
+        => Credentials.FirstOrDefault(c => ReferenceEquals(c, stale))
+        ?? Credentials.FirstOrDefault(c =>
+            string.Equals(c.Label, stale.Label, StringComparison.OrdinalIgnoreCase)
+            && c.Set.Kind == stale.Set.Kind
+            && string.Equals(c.Set.Username, stale.Set.Username, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Restore saved credential profiles (DPAPI CurrentUser). A profile sealed by a different
     /// account/machine won't decrypt — that's the intended security property; tell the operator and move on.</summary>
@@ -109,13 +158,7 @@ public partial class MainViewModel
     // Mutating credentials mid-run could dispose a SecureString a connect is actively using.
     private bool CanMutateCredentials() => !IsScanning;
 
-    partial void OnIsScanningChanged(bool value)
-    {
-        AddCredentialCommand.NotifyCanExecuteChanged();
-        RemoveCredentialCommand.NotifyCanExecuteChanged();
-        EditCredentialCommand.NotifyCanExecuteChanged();
-        OpenScanCommand.NotifyCanExecuteChanged();
-    }
+    partial void OnIsScanningChanged(bool value) => RefreshScanCommands();
 
     private IReadOnlyList<CredentialCandidate> ResolveCandidates()
     {
@@ -145,21 +188,27 @@ public partial class MainViewModel
     {
         if (targets.Count == 0) { StatusLine = "No hosts to inventory."; return; }
 
-        var candidates = ResolveCandidates();
         _cts = new CancellationTokenSource();
-        IsScanning = true;
-        ProgressIndeterminate = false;
-        ProgressFraction = 0;
-        StartScanCommand.NotifyCanExecuteChanged();
-        InventoryAliveCommand.NotifyCanExecuteChanged();
-        InventorySelectedCommand.NotifyCanExecuteChanged();
+        _pause = new PauseController();
+        var pause = _pause;
+        IProgress<ScanProgress> progress = new Progress<ScanProgress>(OnProgress);
 
-        int done = 0, authed = 0, skipped = 0;
+        int done = 0, authed = 0, skipped = 0, inFlight = 0;
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        _runLog.Note($"Inventory of {targets.Count} host(s) started.");
+        // Seed the snapshot so a Pause/Cancel before the first host reports still composes inventory wording.
+        _lastProgress = new ScanProgress(ScanPhase.Inventory, 0, targets.Count, 0, 0, TimeSpan.Zero, null);
 
         try
         {
+            IsScanning = true;
+            IsPaused = false;
+            IsCancelling = false;
+            ProgressIndeterminate = false;
+            ProgressFraction = 0;
+
+            var candidates = ResolveCandidates();
+            _runLog.Note($"Inventory of {targets.Count} host(s) started.");
+
             var options = new System.Threading.Tasks.ParallelOptions
             {
                 MaxDegreeOfParallelism = Math.Max(1, BuildSettings().InventoryConcurrency),
@@ -168,38 +217,53 @@ public partial class MainViewModel
 
             await Task.Run(() => Parallel.ForEachAsync(targets, options, async (m, token) =>
             {
-                // Route by device type, and only try credentials meant for that host kind (so a Windows domain
-                // credential is never fired at an SSH server, and vice versa — avoids pointless auth / lockouts).
-                bool isLinux = m.DeviceType == Marco.Core.Model.DeviceType.UnixLinux;
+                // Pause parks new hosts here; hosts already mid-inventory finish (a WMI/SSH session can't be
+                // suspended half-way), which is what the "N hosts finishing" status counts.
+                await pause.WaitWhilePausedAsync(token).ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
+
+                // Report on entry as well as on completion so "N hosts finishing" is right from the first host.
+                progress.Report(new ScanProgress(ScanPhase.Inventory, Volatile.Read(ref done), targets.Count, 0, 0,
+                    sw.Elapsed, null, Interlocked.Increment(ref inFlight)));
                 InventoryOutcome outcome;
-                if (!force && m.DeviceType is Marco.Core.Model.DeviceType.Printer or Marco.Core.Model.DeviceType.NetworkDevice)
+                try
                 {
-                    // No WMI/SSH inventory story for these; leave their discovery status untouched.
-                    m.StatusDetail = m.DeviceType == Marco.Core.Model.DeviceType.Printer
-                        ? "Skipped: printers aren't inventoried. Use 'Inventory selected' to try anyway."
-                        : "Skipped: network devices aren't inventoried. Use 'Inventory selected' to try anyway.";
-                    outcome = new InventoryOutcome(false, null, m.Status, m.StatusDetail);
-                    Interlocked.Increment(ref skipped);
-                }
-                else
-                {
-                    var hostKind = isLinux ? CredentialKind.Linux : CredentialKind.Windows;
-                    var applicable = candidates.Where(c => c.AppliesTo(hostKind)).ToList();
-                    if (applicable.Count == 0)
+                    // Route by device type, and only try credentials meant for that host kind (so a Windows domain
+                    // credential is never fired at an SSH server, and vice versa — avoids pointless auth / lockouts).
+                    bool isLinux = m.DeviceType == Marco.Core.Model.DeviceType.UnixLinux;
+                    if (!force && m.DeviceType is Marco.Core.Model.DeviceType.Printer or Marco.Core.Model.DeviceType.NetworkDevice)
                     {
-                        // Nothing was attempted, so keep the discovery status — red/orange stays reserved
-                        // for real auth failures.
-                        m.StatusDetail = isLinux
-                            ? "Not inventoried: no Linux/SSH credentials configured."
-                            : "Not inventoried: no Windows credentials configured.";
+                        // No WMI/SSH inventory story for these; leave their discovery status untouched.
+                        m.StatusDetail = m.DeviceType == Marco.Core.Model.DeviceType.Printer
+                            ? "Skipped: printers aren't inventoried. Use 'Inventory selected' to try anyway."
+                            : "Skipped: network devices aren't inventoried. Use 'Inventory selected' to try anyway.";
                         outcome = new InventoryOutcome(false, null, m.Status, m.StatusDetail);
+                        Interlocked.Increment(ref skipped);
                     }
                     else
                     {
-                        outcome = isLinux
-                            ? await _linuxInventory.InventoryAsync(m, applicable, null, null, token).ConfigureAwait(false)
-                            : await _inventory.InventoryAsync(m, applicable, null, null, token).ConfigureAwait(false);
+                        var hostKind = isLinux ? CredentialKind.Linux : CredentialKind.Windows;
+                        var applicable = candidates.Where(c => c.AppliesTo(hostKind)).ToList();
+                        if (applicable.Count == 0)
+                        {
+                            // Nothing was attempted, so keep the discovery status — red/orange stays reserved
+                            // for real auth failures.
+                            m.StatusDetail = isLinux
+                                ? "Not inventoried: no Linux/SSH credentials configured."
+                                : "Not inventoried: no Windows credentials configured.";
+                            outcome = new InventoryOutcome(false, null, m.Status, m.StatusDetail);
+                        }
+                        else
+                        {
+                            outcome = isLinux
+                                ? await _linuxInventory.InventoryAsync(m, applicable, null, null, token).ConfigureAwait(false)
+                                : await _inventory.InventoryAsync(m, applicable, null, null, token).ConfigureAwait(false);
+                        }
                     }
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref inFlight);
                 }
                 _runLog.InventoryAttempt(m.Address, outcome.Authenticated, outcome.Status.ToString(), outcome.CredentialLabel);
 
@@ -208,11 +272,8 @@ public partial class MainViewModel
 
                 int completed = Interlocked.Increment(ref done);
                 if (outcome.Authenticated) Interlocked.Increment(ref authed);
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    ProgressFraction = (double)completed / targets.Count;
-                    StatusLine = $"Inventorying… {completed}/{targets.Count}";
-                });
+                progress.Report(new ScanProgress(ScanPhase.Inventory, completed, targets.Count, 0, 0,
+                    sw.Elapsed, null, Volatile.Read(ref inFlight)));
             }));
 
             StatusLine = $"Inventory complete. {authed}/{targets.Count} authenticated in {sw.Elapsed.TotalSeconds:0.0}s."
@@ -221,20 +282,22 @@ public partial class MainViewModel
         catch (OperationCanceledException)
         {
             StatusLine = $"Inventory cancelled. {done}/{targets.Count} done.";
+            _runLog.Note($"Inventory cancelled. {done}/{targets.Count} done.");
         }
         catch (Exception ex)
         {
             StatusLine = $"Inventory failed: {ex.Message}";
+            _runLog.Note($"Inventory failed: {ex.Message}");
         }
         finally
         {
-            IsScanning = false;
+            IsPaused = false;
+            IsCancelling = false;
+            _pause = null;
             _cts?.Dispose();
             _cts = null;
             ProgressFraction = 0;
-            StartScanCommand.NotifyCanExecuteChanged();
-            InventoryAliveCommand.NotifyCanExecuteChanged();
-            InventorySelectedCommand.NotifyCanExecuteChanged();
+            IsScanning = false;
         }
     }
 
@@ -246,7 +309,7 @@ public partial class MainViewModel
             ? MachinesView.Cast<Machine>()
             : Machines;
         var machines = source.ToList();
-        var meta = new ScanMetadata(DateTime.Now, Environment.UserName, _lastRanges,
+        var meta = new ScanMetadata(DateTime.Now, Environment.UserName, LastRanges,
             machines.Count, machines.Count(m => m.IsAlive), Version: Marco.Core.AppVersion.Display);
         return ScanDocument.From(meta, machines);
     }
@@ -276,7 +339,7 @@ public partial class MainViewModel
             AliveCount = Machines.Count(m => m.IsAlive);
             UnreachableCount = Machines.Count - AliveCount;
             TotalCount = doc.Metadata.TotalTargets > 0 ? doc.Metadata.TotalTargets : Machines.Count;
-            _lastRanges = doc.Metadata.RangesScanned?.ToList() ?? new List<string>();
+            LastRanges = doc.Metadata.RangesScanned?.ToList() ?? new List<string>();
             ProgressFraction = 0;
             StatusLine = $"Loaded scan from {Path.GetFileName(dialog.FileName)} ({doc.Metadata.Timestamp:g}).";
             InventoryAliveCommand.NotifyCanExecuteChanged();

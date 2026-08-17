@@ -40,6 +40,14 @@ public partial class MainViewModel : ObservableObject
 
     private IReadOnlyList<string> _lastRanges = Array.Empty<string>();
 
+    /// <summary>The target tokens of the scan currently in the grid (started here or loaded from a file). Drives
+    /// the window title so several Marco windows can be told apart in the taskbar.</summary>
+    private IReadOnlyList<string> LastRanges
+    {
+        get => _lastRanges;
+        set { _lastRanges = value; OnPropertyChanged(nameof(Title)); }
+    }
+
     public ObservableCollection<Machine> Machines { get; } = new();
     public ICollectionView MachinesView { get; }
 
@@ -65,6 +73,8 @@ public partial class MainViewModel : ObservableObject
     // --- Run state ---
     [ObservableProperty] private bool _isScanning;
     [ObservableProperty] private bool _isPaused;
+    /// <summary>Cancel was clicked and in-flight work is draining; the run is still "scanning" until it settles.</summary>
+    [ObservableProperty] private bool _isCancelling;
     [ObservableProperty] private double _progressFraction;
     [ObservableProperty] private bool _progressIndeterminate;
     [ObservableProperty] private string _statusLine = "Ready.";
@@ -74,8 +84,22 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _unreachableCount;
     [ObservableProperty] private int _totalCount;
 
+    /// <summary>Latest progress snapshot of the current run — the status line is recomposed from it whenever the
+    /// pause/cancel state changes, so a report arriving after Pause can't overwrite "Paused".</summary>
+    private ScanProgress? _lastProgress;
+
     public string StorageLocation => _paths.Reason;
-    public string Title => $"Marco — Network Inventory — v{Marco.Core.AppVersion.Display}";
+
+    public string Title
+    {
+        get
+        {
+            var version = $"v{Marco.Core.AppVersion.Display}";
+            if (LastRanges.Count == 0) return $"Marco — Network Inventory — {version}";
+            var extra = LastRanges.Count > 1 ? $" (+{LastRanges.Count - 1} more)" : "";
+            return $"Marco — {LastRanges[0]}{extra} — {version}";
+        }
+    }
 
     public MainViewModel() : this(null) { }
 
@@ -171,6 +195,8 @@ public partial class MainViewModel : ObservableObject
         }
         if (added && SelectedMachine is null && Machines.Count > 0)
             SelectedMachine = Machines[0];
+        if (added)
+            InventoryAliveCommand.NotifyCanExecuteChanged(); // CanInventory depends on Machines.Count
     }
 
     private bool CanStart() => !IsScanning;
@@ -179,6 +205,7 @@ public partial class MainViewModel : ObservableObject
     private async Task StartScanAsync()
     {
         List<ScanTarget> targets;
+        List<string> ranges;
         long estimate;
         try
         {
@@ -194,11 +221,11 @@ public partial class MainViewModel : ObservableObject
                 var answer = MessageBox.Show(
                     $"This will scan {estimate:N0} addresses, which is above the {options.LargeExpansionThreshold:N0} guard.\n\nProceed anyway?",
                     "Large scan", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                if (answer != MessageBoxResult.Yes) { StatusLine = "Scan cancelled."; return; }
+                if (answer != MessageBoxResult.Yes) { StatusLine = "Scan not started."; return; }
                 options = new TargetExpansionOptions { AllowLargeExpansion = true };
             }
             targets = TargetParser.Parse(new[] { TargetsText }, options).ToList();
-            _lastRanges = TargetParser.Tokenize(new[] { TargetsText }).ToList();
+            ranges = TargetParser.Tokenize(new[] { TargetsText }).ToList();
         }
         catch (TargetParseException ex)
         {
@@ -207,27 +234,33 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        LastRanges = ranges;
         Machines.Clear();
         SelectedMachine = null;
         AliveCount = UnreachableCount = 0;
         TotalCount = targets.Count;
+        // Seed the snapshot so a Pause/Cancel before the first report still composes discovery wording.
+        _lastProgress = new ScanProgress(ScanPhase.Discovery, 0, targets.Count, 0, 0, TimeSpan.Zero, null);
 
         _cts = new CancellationTokenSource();
         _pause = new PauseController();
-        IsScanning = true;
-        IsPaused = false;
-        ProgressIndeterminate = false;
-        StartScanCommand.NotifyCanExecuteChanged();
-
-        var settings = BuildSettings();
-        var progress = new Progress<ScanProgress>(OnProgress);
-        _flushTimer.Start();
-        _runLog.ScanStarted(_lastRanges, targets.Count);
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
         bool discoveryCompleted = false;
         try
         {
+            // Everything from IsScanning = true onward is inside the try, so no exception can leave the scan
+            // commands latched in the "running" state.
+            IsScanning = true;
+            IsPaused = false;
+            IsCancelling = false;
+            ProgressIndeterminate = false;
+
+            var settings = BuildSettings();
+            var progress = new Progress<ScanProgress>(OnProgress);
+            _flushTimer.Start();
+            _runLog.ScanStarted(ranges, targets.Count);
+
             StatusLine = $"Scanning {targets.Count:N0} addresses…";
             await Task.Run(() => _controller.RunDiscoveryAsync(
                 targets, settings, targets.Count, IncludeUnreachable,
@@ -242,23 +275,25 @@ public partial class MainViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            StatusLine = $"Cancelled. {AliveCount:N0} alive so far.";
+            int probed = _lastProgress?.Completed ?? 0;
+            StatusLine = $"Cancelled. {AliveCount:N0} alive, {UnreachableCount:N0} unreachable ({probed:N0} of {TotalCount:N0} probed).";
+            _runLog.ScanCancelled(AliveCount, UnreachableCount, probed, TotalCount, sw.Elapsed.TotalSeconds);
         }
         catch (Exception ex)
         {
             StatusLine = $"Scan failed: {ex.Message}";
+            _runLog.Note($"Scan failed: {ex.Message}");
         }
         finally
         {
             _flushTimer.Stop();
             FlushPending();
-            IsScanning = false;
             IsPaused = false;
+            IsCancelling = false;
+            _pause = null;
             _cts?.Dispose();
             _cts = null;
-            StartScanCommand.NotifyCanExecuteChanged();
-            InventoryAliveCommand.NotifyCanExecuteChanged();
-            InventorySelectedCommand.NotifyCanExecuteChanged();
+            IsScanning = false;
         }
 
         // Chain straight into inventory when requested (after discovery's own cleanup has run).
@@ -273,19 +308,61 @@ public partial class MainViewModel : ObservableObject
     partial void OnSelectedMachineChanged(Machine? value)
         => InventorySelectedCommand.NotifyCanExecuteChanged();
 
-    [RelayCommand]
-    private void PauseResume()
+    partial void OnIsCancellingChanged(bool value) => RefreshScanCommands();
+
+    /// <summary>Every command whose CanExecute reads run state. Called from the IsScanning / IsCancelling change
+    /// hooks so a state flip can never leave a button stale.</summary>
+    private void RefreshScanCommands()
     {
-        if (_pause is null || !IsScanning) return;
-        if (IsPaused) { _pause.Resume(); IsPaused = false; StatusLine = "Resumed."; }
-        else { _pause.Pause(); IsPaused = true; StatusLine = "Paused."; }
+        StartScanCommand.NotifyCanExecuteChanged();
+        PauseResumeCommand.NotifyCanExecuteChanged();
+        CancelCommand.NotifyCanExecuteChanged();
+        ClearResultsCommand.NotifyCanExecuteChanged();
+        InventoryAliveCommand.NotifyCanExecuteChanged();
+        InventorySelectedCommand.NotifyCanExecuteChanged();
+        OpenScanCommand.NotifyCanExecuteChanged();
+        AddCredentialCommand.NotifyCanExecuteChanged();
+        RemoveCredentialCommand.NotifyCanExecuteChanged();
+        EditCredentialCommand.NotifyCanExecuteChanged();
     }
 
-    [RelayCommand]
+    private bool CanPauseResume() => IsScanning && !IsCancelling && _pause is not null;
+
+    [RelayCommand(CanExecute = nameof(CanPauseResume))]
+    private void PauseResume()
+    {
+        if (_pause is null || !IsScanning || IsCancelling) return;
+        if (IsPaused) { _pause.Resume(); IsPaused = false; }
+        else { _pause.Pause(); IsPaused = true; }
+        RefreshScanStatus();
+    }
+
+    private bool CanCancel() => IsScanning && !IsCancelling;
+
+    [RelayCommand(CanExecute = nameof(CanCancel))]
     private void Cancel()
     {
-        _cts?.Cancel();
-        _pause?.Resume(); // release any paused workers so they observe cancellation
+        if (_cts is null || !IsScanning) return;
+        IsCancelling = true;      // disables Pause/Cancel and switches the status text to "Cancelling…"
+        _cts.Cancel();
+        _pause?.Resume();         // release any paused workers so they observe cancellation
+        IsPaused = false;
+        RefreshScanStatus();
+    }
+
+    /// <summary>Recompose the status line from the latest progress plus the current pause/cancel intent — used
+    /// right after Pause/Resume/Cancel so the operator sees the change before the next report arrives.</summary>
+    private void RefreshScanStatus()
+    {
+        if (!IsScanning) return;
+        if (_lastProgress is { } p)
+        {
+            var text = ScanStatusText.Compose(p, IsPaused, IsCancelling);
+            if (text.Length > 0) { StatusLine = text; return; }
+        }
+        if (IsCancelling) StatusLine = "Cancelling…";
+        else if (IsPaused) StatusLine = "Paused.";
+        else StatusLine = "Resumed.";
     }
 
     [RelayCommand]
@@ -341,15 +418,19 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
+    private bool CanClear() => !IsScanning;
+
+    [RelayCommand(CanExecute = nameof(CanClear))]
     private void ClearResults()
     {
         if (IsScanning) return;
         Machines.Clear();
         SelectedMachine = null;
+        LastRanges = Array.Empty<string>();
         AliveCount = UnreachableCount = TotalCount = 0;
         ProgressFraction = 0;
         StatusLine = "Cleared.";
+        InventoryAliveCommand.NotifyCanExecuteChanged();
     }
 
     private ScanSettings BuildSettings() => new()
@@ -364,15 +445,28 @@ public partial class MainViewModel : ObservableObject
 
     private void OnProgress(ScanProgress p)
     {
-        AliveCount = p.Alive;
-        UnreachableCount = p.Unreachable;
-        if (p.Total is > 0) TotalCount = p.Total.Value;
+        _lastProgress = p;
+
+        // Inventory reports carry no alive/unreachable counts — don't let them zero the discovery numbers.
+        if (p.Phase is ScanPhase.Discovery or ScanPhase.Complete or ScanPhase.Cancelled)
+        {
+            AliveCount = p.Alive;
+            UnreachableCount = p.Unreachable;
+            if (p.Total is > 0) TotalCount = p.Total.Value;
+        }
         ProgressFraction = p.Fraction ?? 0;
         ProgressIndeterminate = p.Fraction is null && p.Phase == ScanPhase.Discovery;
         ElapsedText = Format(p.Elapsed);
-        EtaText = p.EstimatedRemaining is { } eta && p.Phase == ScanPhase.Discovery ? $"ETA {Format(eta)}" : "";
-        if (p.Phase == ScanPhase.Discovery)
-            StatusLine = $"Scanning… {p.Completed:N0}/{(p.Total?.ToString("N0") ?? "?")}  ·  {p.Alive:N0} alive";
+        EtaText = p.EstimatedRemaining is { } eta && p.Phase == ScanPhase.Discovery && !IsPaused && !IsCancelling
+            ? $"ETA {Format(eta)}" : "";
+
+        // The status is a function of (progress, paused, cancelling): a report arriving while paused reads
+        // "Paused at …", not "Scanning…", so in-flight hosts finishing can't overwrite what the operator asked for.
+        if (IsScanning && p.Phase is ScanPhase.Discovery or ScanPhase.Inventory)
+        {
+            var text = ScanStatusText.Compose(p, IsPaused, IsCancelling);
+            if (text.Length > 0) StatusLine = text;
+        }
     }
 
     private static string Format(TimeSpan t) =>

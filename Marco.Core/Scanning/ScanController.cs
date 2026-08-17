@@ -43,9 +43,9 @@ public sealed class ScanController
         CancellationToken ct)
     {
         var sw = Stopwatch.StartNew();
-        int completed = 0, alive = 0, unreachable = 0;
+        int completed = 0, alive = 0, unreachable = 0, inFlight = 0;
         var reportLock = new object();
-        long lastReportTicks = 0;
+        long lastReportTicks = -1000; // negative so the very first report is never swallowed by the throttle
 
         void Report(bool force)
         {
@@ -68,7 +68,7 @@ public sealed class ScanController
             progress.Report(new ScanProgress(
                 ScanPhase.Discovery, done, totalHint,
                 Volatile.Read(ref alive), Volatile.Read(ref unreachable),
-                sw.Elapsed, eta));
+                sw.Elapsed, eta, Volatile.Read(ref inFlight)));
         }
 
         var options = new ParallelOptions
@@ -84,6 +84,8 @@ public sealed class ScanController
                 if (pause is not null) await pause.WaitWhilePausedAsync(token).ConfigureAwait(false);
                 token.ThrowIfCancellationRequested();
 
+                Interlocked.Increment(ref inFlight);
+                bool counted = true;
                 Machine? emit = null;
                 try
                 {
@@ -108,6 +110,21 @@ public sealed class ScanController
                     }
                     else
                     {
+                        // Second pause gate: liveness is done, but don't start name/MAC/classify work while paused.
+                        // Leave the in-flight count while parked so the UI's "N in flight finishing" reaches zero.
+                        // A host parked here when the scan is cancelled is abandoned (counted as completed, never
+                        // emitted) — the same outcome as cancelling mid-enrichment.
+                        if (pause is not null && pause.IsPaused)
+                        {
+                            Interlocked.Decrement(ref inFlight);
+                            counted = false;
+                            Report(force: true);
+                            await pause.WaitWhilePausedAsync(token).ConfigureAwait(false);
+                            token.ThrowIfCancellationRequested();
+                            Interlocked.Increment(ref inFlight);
+                            counted = true;
+                        }
+
                         emit = await BuildAliveMachineAsync(target, liveness, settings, token).ConfigureAwait(false);
                         Interlocked.Increment(ref alive);
                     }
@@ -129,24 +146,30 @@ public sealed class ScanController
                 }
                 finally
                 {
+                    if (counted) Interlocked.Decrement(ref inFlight);
                     Interlocked.Increment(ref completed);
                 }
 
                 if (emit is not null)
                     onMachine(emit);
-                Report(force: false);
+                // While paused or draining a cancel the throttle would leave the last few counts stale on screen;
+                // force those through so "N in flight" visibly ticks down to zero.
+                Report(force: token.IsCancellationRequested || pause?.IsPaused == true);
             }).ConfigureAwait(false);
 
             Report(force: true);
             progress?.Report(new ScanProgress(
                 ScanPhase.Complete, Volatile.Read(ref completed), totalHint,
-                Volatile.Read(ref alive), Volatile.Read(ref unreachable), sw.Elapsed, TimeSpan.Zero));
+                Volatile.Read(ref alive), Volatile.Read(ref unreachable), sw.Elapsed, TimeSpan.Zero,
+                Volatile.Read(ref inFlight)));
         }
         catch (OperationCanceledException)
         {
+            // Parallel.ForEachAsync has awaited every in-flight body by now, so these counts are settled.
             progress?.Report(new ScanProgress(
                 ScanPhase.Cancelled, Volatile.Read(ref completed), totalHint,
-                Volatile.Read(ref alive), Volatile.Read(ref unreachable), sw.Elapsed, null));
+                Volatile.Read(ref alive), Volatile.Read(ref unreachable), sw.Elapsed, null,
+                Volatile.Read(ref inFlight)));
             throw;
         }
     }

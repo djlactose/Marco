@@ -21,7 +21,7 @@ public sealed class LivenessProbe : ILivenessProbe
 
         if (settings.IcmpEnabled)
         {
-            var (ok, replyTtl) = await TryIcmpAsync(address, settings.IcmpTimeoutMs).ConfigureAwait(false);
+            var (ok, replyTtl) = await TryIcmpAsync(address, settings.IcmpTimeoutMs, ct).ConfigureAwait(false);
             if (ok)
             {
                 alive = true;
@@ -65,15 +65,31 @@ public sealed class LivenessProbe : ILivenessProbe
         return new LivenessResult(true, method, ttl, openPorts);
     }
 
-    private static async Task<(bool ok, int? ttl)> TryIcmpAsync(string address, int timeoutMs)
+    /// <summary>ICMP echo that honours cancellation, so a Cancel doesn't wait out every in-flight ping's timeout.
+    /// A token cancel surfaces from Ping as an unwrapped OperationCanceledException; a plain timeout is
+    /// IPStatus.TimedOut (or a PingException on some stacks) and must still read as "dead", not "cancelled".</summary>
+    private static async Task<(bool ok, int? ttl)> TryIcmpAsync(string address, int timeoutMs, CancellationToken ct)
     {
         try
         {
             using var ping = new Ping();
-            var reply = await ping.SendPingAsync(address, timeoutMs).ConfigureAwait(false);
+            var reply = await ping.SendPingAsync(address, TimeSpan.FromMilliseconds(timeoutMs), null, null, ct)
+                .ConfigureAwait(false);
             if (reply.Status == IPStatus.Success)
                 return (true, reply.Options?.Ttl);
             return (false, null);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            return (false, null); // internal timeout token on some platforms — not our cancellation
+        }
+        catch (PingException) when (ct.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(ct);
         }
         catch (PingException)
         {

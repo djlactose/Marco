@@ -77,9 +77,12 @@ runtime extraction) instead of the single self-extracting exe.
 
 ## Using it
 
-1. **Targets** — enter CIDR (`10.0.0.0/24`), ranges (`10.0.0.1-50`), single IPs, or hostnames (one per line), or
-   load a host file. Expansions over 65,536 addresses ask for confirmation.
-2. **Discovery** — click **Start**. The grid fills as hosts respond; **Pause**/**Cancel** any time.
+1. **Targets** — enter CIDR (`10.0.0.0/24`), ranges (`10.0.0.1-50`), single IPs, or hostnames (one per line, or
+   comma/space-separated on a line), or load a host file. Several networks can go in one scan. Expansions over
+   65,536 addresses ask for confirmation.
+2. **Discovery** — click **Start**. The grid fills as hosts respond. **Pause** parks new hosts (hosts already
+   mid-probe finish — the status shows how many are still "in flight"); **Cancel** stops within about a second and
+   the status reads "Cancelling…" until the last in-flight probes have drained. Both also work during inventory.
 3. **Credentials** — add one or more credential sets (left panel). They are tried in order per host; the first
    that authenticates is remembered for that host. With none configured, Marco uses your current session token.
 4. **Inventory** — select a host and **Inventory selected**, or **Inventory alive** for all live Windows hosts.
@@ -88,6 +91,10 @@ runtime extraction) instead of the single self-extracting exe.
    **Export JSON** (the full nested structure). Exports respect the current filter and include scan metadata
    (including the app version that produced them). **Open scan…** loads a previously exported JSON scan back
    into the grid.
+6. **Multiple windows** — open Marco again to scan another network side by side; each window's title shows its
+   targets. All windows share the same data folder: `settings.json` is whatever the last-closed window saved,
+   credential edits made in one window are picked up by the others before they save, and run-log lines carry the
+   writing process's `pid`.
 
 ---
 
@@ -144,6 +151,12 @@ applied mid-session without a click, a failed update rolls back automatically (c
 (left panel, "About & updates") selects the channel; by default a beta build follows betas and a stable build
 follows stable. Set the environment variable **`MARCO_NO_UPDATE=1`** to disable the updater entirely (e.g. via
 GPO/SCCM for managed fleets).
+
+With several Marco windows open, the steps that touch the exe (apply at startup, rollback, "restart to apply")
+are serialised across windows through a short-lived gate, and only one window downloads a given release (the
+others report "another Marco window is downloading this update" and pick up the staged file on their next
+check). After one window applies an update, a window still running the previous version keeps running from
+`Marco.exe.old` until it is closed; its "restart to apply" link then says the update was applied elsewhere.
 
 ---
 

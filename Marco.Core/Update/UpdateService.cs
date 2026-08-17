@@ -5,7 +5,9 @@ using Marco.Core.Storage;
 
 namespace Marco.Core.Update;
 
-public enum UpdateState { Unknown, UpToDate, Staged, NotifyOnly, Failed }
+/// <summary><see cref="Deferred"/>: another Marco window is downloading/staging this same release right now; the
+/// caller should simply check again later rather than treat it as a failure.</summary>
+public enum UpdateState { Unknown, UpToDate, Staged, NotifyOnly, Failed, Deferred }
 
 public sealed record UpdateCheckResult(UpdateState State, ReleaseInfo? Release, string? StagedExePath);
 
@@ -56,6 +58,7 @@ public sealed class UpdateService
     private string SentinelPath => Path.Combine(UpdatesDirectory, "startup.pending");
     private string WhatsNewPath => Path.Combine(UpdatesDirectory, "whatsnew.json");
     private string RollbackPath => Path.Combine(UpdatesDirectory, "rollback.json");
+    private string StageLockPath => Path.Combine(UpdatesDirectory, "stage.lock");
 
     private sealed record SentinelInfo(string Version, int Attempts);
     private sealed record RollbackInfo(string Version);
@@ -239,6 +242,18 @@ public sealed class UpdateService
             var fileName = $"Marco-{release.Version}.exe";
             var stagedPath = Path.Combine(UpdatesDirectory, fileName);
 
+            // Several Marco windows share one updates directory. Only one of them should download a given release;
+            // the others defer and pick up the staged file on their next check. A lock *file* (not a Mutex or
+            // Semaphore) because it isn't thread-affine across the awaits below and the kernel releases it if the
+            // process dies mid-download.
+            using var stageLock = TryOpenStageLock();
+            if (stageLock is null)
+            {
+                _log("stage_deferred", $"{release.TagName}: another Marco instance is staging it");
+                return new UpdateCheckResult(UpdateState.Deferred, release, null);
+            }
+
+            // Under the lock: the other window may have just finished — don't download it a second time.
             var existing = ReadStagedManifest();
             if (existing is not null && existing.FileName == fileName && Sha256File.Verify(stagedPath, existing.Sha256))
             {
@@ -258,7 +273,7 @@ public sealed class UpdateService
                 return new UpdateCheckResult(UpdateState.Failed, release, null);
             }
 
-            var partial = stagedPath + ".partial";
+            var partial = $"{stagedPath}.{Environment.ProcessId}.partial";
             TryDelete(partial);
             using (var dlCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
             {
@@ -273,8 +288,7 @@ public sealed class UpdateService
                 return new UpdateCheckResult(UpdateState.Failed, release, null);
             }
 
-            TryDelete(stagedPath);
-            File.Move(partial, stagedPath);
+            File.Move(partial, stagedPath, overwrite: true);
             WriteStagedManifest(new StagedManifest(
                 release.Version.ToString(), fileName, expected, DateTime.UtcNow, release.Body, release.HtmlUrl));
             _log("staged", release.TagName);
@@ -287,8 +301,62 @@ public sealed class UpdateService
         }
     }
 
-    /// <summary>The operator clicked "restart to apply". Returns true when the relaunch was started.</summary>
-    public bool TryApplyAndRestartNow() => TryApplyStagedAndRelaunch();
+    /// <summary>The operator clicked "restart to apply". Returns true when the relaunch was started. Serialised
+    /// with the other windows' startup swap/rollback through the update gate.</summary>
+    public bool TryApplyAndRestartNow()
+    {
+        using var gate = UpdateGate.TryAcquire(_paths.Root, TimeSpan.FromSeconds(3));
+        if (gate is null)
+        {
+            _log("gate_busy", "restart-to-apply skipped: another Marco instance is starting or applying an update");
+            return false;
+        }
+        return TryApplyStagedAndRelaunch();
+    }
+
+    /// <summary>True when the exe on disk at our own path is already a newer version than the one running — i.e.
+    /// another Marco window applied the update. This process keeps running the old image; a fresh launch gets the
+    /// new one.</summary>
+    public bool ExeOnDiskIsNewer()
+    {
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (exe is null || !File.Exists(exe)) return false;
+            var product = FileVersionInfo.GetVersionInfo(exe).ProductVersion;
+            if (product is null) return false;
+            var plus = product.IndexOf('+'); // ProductVersion mirrors InformationalVersion; strip any "+sha"
+            if (plus >= 0) product = product[..plus];
+            return MarcoVersion.TryParse(product, out var onDisk) && onDisk > _current;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Opens <c>updates\stage.lock</c> exclusively; null when another process holds it. A couple of quick
+    /// retries absorb an antivirus scanner briefly holding the file. The 0-byte lock file is left in place
+    /// (no DeleteOnClose — that invites delete-pending races between two openers).</summary>
+    private FileStream? TryOpenStageLock()
+    {
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            try
+            {
+                return new FileStream(StageLockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException)
+            {
+                if (attempt < 2) Thread.Sleep(50);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+        return null;
+    }
 
     // --- Swap ---------------------------------------------------------------------------------------------------
 
@@ -369,9 +437,16 @@ public sealed class UpdateService
         }
     }
 
+    /// <summary>Write-to-temp then rename, so a reader in another Marco window (or the next startup) never sees a
+    /// half-written manifest or sentinel.</summary>
     private static void WriteJson<T>(string path, T value)
     {
-        try { File.WriteAllText(path, JsonSerializer.Serialize(value, JsonOpts), new UTF8Encoding(false)); }
+        try
+        {
+            var tmp = path + ".tmp";
+            File.WriteAllText(tmp, JsonSerializer.Serialize(value, JsonOpts), new UTF8Encoding(false));
+            File.Move(tmp, path, overwrite: true);
+        }
         catch { /* update bookkeeping must never break the app */ }
     }
 

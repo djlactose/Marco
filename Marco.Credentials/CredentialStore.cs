@@ -23,6 +23,10 @@ public sealed class CredentialStore : IDisposable
     private readonly List<CredentialSet> _sets = new();
     private readonly object _lock = new();
 
+    // SHA-256 of the file as last read or written by this instance (null = no file). Another Marco window may
+    // save in between; ReloadIfChanged compares against this before a mutation so we never clobber its edit.
+    private string? _diskFingerprint;
+
     public IReadOnlyList<CredentialSet> Sets
     {
         get { lock (_lock) return _sets.ToList(); }
@@ -97,17 +101,22 @@ public sealed class CredentialStore : IDisposable
             }).ToList();
         }
 
-        var json = JsonSerializer.Serialize(entries, JsonOpts);
-        File.WriteAllText(path, json, new UTF8Encoding(false));
+        var bytes = new UTF8Encoding(false).GetBytes(JsonSerializer.Serialize(entries, JsonOpts));
+        // Write-to-temp then rename: a concurrent reader (another Marco window) never sees a torn file.
+        var tmp = path + ".tmp";
+        File.WriteAllBytes(tmp, bytes);
+        File.Move(tmp, path, overwrite: true);
+        _diskFingerprint = Fingerprint(bytes);
     }
 
     /// <summary>Load and replace the current set list. Throws <see cref="CredentialDecryptException"/> if the
     /// blobs were sealed by a different account/machine.</summary>
     public void Load(string path)
     {
-        if (!File.Exists(path)) return;
-        var json = File.ReadAllText(path);
-        var entries = JsonSerializer.Deserialize<List<PersistedEntry>>(json, JsonOpts) ?? new();
+        if (!File.Exists(path)) { _diskFingerprint = null; return; }
+        var bytes = File.ReadAllBytes(path);
+        var fingerprint = Fingerprint(bytes);
+        var entries = JsonSerializer.Deserialize<List<PersistedEntry>>(bytes, JsonOpts) ?? new();
 
         var loaded = new List<CredentialSet>();
         foreach (var e in entries)
@@ -142,7 +151,27 @@ public sealed class CredentialStore : IDisposable
 
         Clear();
         lock (_lock) _sets.AddRange(loaded);
+        _diskFingerprint = fingerprint;
     }
+
+    /// <summary>If the file on disk differs from what this instance last read or wrote (another Marco window
+    /// saved), reload it and return true; otherwise leave the in-memory list untouched and return false. Call
+    /// before a mutation that will be saved, so the save doesn't discard the other window's edit. May throw
+    /// <see cref="CredentialDecryptException"/> like <see cref="Load"/>.</summary>
+    public bool ReloadIfChanged(string path)
+    {
+        string? onDisk = null;
+        if (File.Exists(path))
+        {
+            try { onDisk = Fingerprint(File.ReadAllBytes(path)); }
+            catch (IOException) { return false; } // mid-rename by the other window; the next mutation will see it
+        }
+        if (onDisk == _diskFingerprint) return false;
+        Load(path);
+        return true;
+    }
+
+    private static string Fingerprint(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
 
     // Fixed application entropy — not a secret (defense-in-depth alongside the DPAPI user scope).
     private static readonly byte[] OptionalEntropy = Encoding.ASCII.GetBytes("Marco.Credentials.v1");
