@@ -77,6 +77,32 @@ public sealed class Machine : ObservableBase
     public List<AntivirusEntry> Antivirus { get; } = new();
     public List<PrinterEntry> Printers { get; } = new();
     public List<UsbDeviceEntry> UsbDevices { get; } = new();
+    public List<UsbStorageHistoryEntry> UsbStorageHistory { get; } = new();
+
+    // Users / services / peripherals (Phase 3 collectors)
+    public List<LocalAccountEntry> LocalAccounts { get; } = new();
+    /// <summary>Members of the local Administrators group as "DOMAIN\name" (groups suffixed "(group)").</summary>
+    public List<string> LocalAdministrators { get; } = new();
+    public List<UserProfileEntry> UserProfiles { get; } = new();
+    public List<LogonSessionEntry> LogonSessions { get; } = new();
+    public List<ServiceEntry> Services { get; } = new();
+    public List<StartupEntry> StartupItems { get; } = new();
+    public List<ScheduledTaskEntry> ScheduledTasks { get; } = new();
+    public List<MonitorEntry> Monitors { get; } = new();
+    public List<GpuInfo> Gpus { get; } = new();
+
+    // Scalar groups. Settable so a reopened scan can hand its deserialized object straight over; the detail
+    // pane re-reads them through NotifyInventoryUpdated like System/Os.
+    private UpdateInfo _updates = new();
+    private SecurityInfo _security = new();
+    private BatteryInfo? _battery;
+    private int? _thermalTempC;
+    public UpdateInfo Updates { get => _updates; set => Set(ref _updates, value ?? new UpdateInfo()); }
+    public SecurityInfo Security { get => _security; set => Set(ref _security, value ?? new SecurityInfo()); }
+    /// <summary>Null on machines without a battery.</summary>
+    public BatteryInfo? Battery { get => _battery; set => Set(ref _battery, value); }
+    /// <summary>Hottest ACPI thermal zone, when the firmware exposes one over WMI (rare on desktops).</summary>
+    public int? ThermalTempC { get => _thermalTempC; set => Set(ref _thermalTempC, value); }
 
     // --- Memory summary (filled by the memory collector) ---
     private long _totalMemoryBytes;
@@ -92,10 +118,17 @@ public sealed class Machine : ObservableBase
 
     // --- Grid summary columns for list-valued data ---
     private int _cpuCount, _softwareCount, _diskCount, _adapterCount;
+    private int _serviceCount, _stoppedAutoServiceCount, _hotfixCount, _localAccountCount, _monitorCount;
     public int CpuCount { get => _cpuCount; set => Set(ref _cpuCount, value); }
     public int SoftwareCount { get => _softwareCount; set => Set(ref _softwareCount, value); }
     public int DiskCount { get => _diskCount; set => Set(ref _diskCount, value); }
     public int AdapterCount { get => _adapterCount; set => Set(ref _adapterCount, value); }
+    public int ServiceCount { get => _serviceCount; set => Set(ref _serviceCount, value); }
+    /// <summary>Services set to start automatically that are not running — the classic "something's wrong" count.</summary>
+    public int StoppedAutoServiceCount { get => _stoppedAutoServiceCount; set => Set(ref _stoppedAutoServiceCount, value); }
+    public int HotfixCount { get => _hotfixCount; set => Set(ref _hotfixCount, value); }
+    public int LocalAccountCount { get => _localAccountCount; set => Set(ref _localAccountCount, value); }
+    public int MonitorCount { get => _monitorCount; set => Set(ref _monitorCount, value); }
 
     /// <summary>First MAC, for the grid's single MAC column.</summary>
     public string? PrimaryMac => MacAddresses.Count > 0 ? MacAddresses[0] : null;
@@ -105,6 +138,30 @@ public sealed class Machine : ObservableBase
 
     /// <summary>Sorted open-port list for the detail view.</summary>
     public string OpenPortsDisplay => string.Join(", ", OpenPorts.OrderBy(p => p));
+
+    /// <summary>"Product (on, up to date); Product2 (OFF)" over the antivirus-kind entries, for the grid/CSV.</summary>
+    public string? AntivirusSummary
+    {
+        get
+        {
+            var av = Antivirus.Where(a => a.Kind == "Antivirus").ToList();
+            if (av.Count == 0) return null;
+            return string.Join("; ", av.Select(a =>
+                (a.Product ?? "?") + " (" + (a.Enabled switch { true => "on", false => "OFF", _ => "?" })
+                + (a.UpToDate == false ? ", out of date" : "") + ")"));
+        }
+    }
+
+    /// <summary>Local Administrators as one comma-joined line.</summary>
+    public string? LocalAdministratorsDisplay => LocalAdministrators.Count == 0 ? null : string.Join(", ", LocalAdministrators);
+
+    /// <summary>"3 running · 1 auto-stopped" for the Services section header.</summary>
+    public string? ServicesSummary => Services.Count == 0 ? null
+        : $"{Services.Count(s => string.Equals(s.State, "Running", StringComparison.OrdinalIgnoreCase))} running of {Services.Count}"
+          + (StoppedAutoServiceCount > 0 ? $", {StoppedAutoServiceCount} automatic but stopped" : "");
+
+    /// <summary>First GPU for the grid/CSV.</summary>
+    public string? PrimaryGpu => Gpus.Count > 0 ? Gpus[0].Name : null;
 
     public Machine(string address)
     {
@@ -134,6 +191,9 @@ public sealed class Machine : ObservableBase
     {
         System.RaiseAll();
         Os.RaiseAll();
+        Updates.RaiseAll();
+        Security.RaiseAll();
+        Battery?.RaiseAll();
         RaiseAll();
     }
 
@@ -159,5 +219,12 @@ public sealed class Machine : ObservableBase
         SoftwareCount = Software.Count;
         DiskCount = Disks.Count;
         AdapterCount = Adapters.Count;
+        ServiceCount = Services.Count;
+        StoppedAutoServiceCount = Services.Count(s =>
+            string.Equals(s.StartMode, "Auto", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(s.State, "Running", StringComparison.OrdinalIgnoreCase));
+        HotfixCount = Hotfixes.Count;
+        LocalAccountCount = LocalAccounts.Count;
+        MonitorCount = Monitors.Count;
     }
 }

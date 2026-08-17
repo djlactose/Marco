@@ -76,7 +76,9 @@ public sealed class GroupSummaryConverter : IMultiValueConverter
         => throw new NotSupportedException();
 }
 
-/// <summary>Non-empty/non-null → Visible, else Collapsed.</summary>
+/// <summary>Non-empty/non-null → Visible, else Collapsed. "Empty" also covers numeric zero (a count or size of
+/// 0), false, and an empty collection, so section headers bound to a count disappear when there is nothing to
+/// show.</summary>
 public sealed class NotEmptyToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object? parameter, CultureInfo culture)
@@ -85,6 +87,11 @@ public sealed class NotEmptyToVisibilityConverter : IValueConverter
         {
             null => false,
             string s => !string.IsNullOrWhiteSpace(s),
+            bool b => b,
+            int i => i != 0,
+            long l => l != 0,
+            double d => d != 0,
+            System.Collections.ICollection c => c.Count > 0,
             _ => true,
         };
         return has ? Visibility.Visible : Visibility.Collapsed;

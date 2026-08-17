@@ -29,6 +29,7 @@ public sealed class OsCollector : IInventoryCollector
 
         // ProductType: 1 = Workstation, 2 = Domain Controller, 3 = Server.
         var productType = os.GetInt("ProductType");
+        machine.System.IsDomainController = productType == 2;
         if (productType is 2 or 3)
             machine.DeviceType = DeviceType.WindowsServer;
         else if (productType == 1 && machine.DeviceType is DeviceType.Unknown or DeviceType.Windows)

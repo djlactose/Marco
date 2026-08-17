@@ -124,7 +124,16 @@ public sealed class SystemManagementWmiSession : IWmiSession
     {
         var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
         foreach (PropertyData prop in mo.Properties)
-            dict[prop.Name] = prop.Value;
+        {
+            // Embedded objects (e.g. MSFT_ScheduledTask.Principal) come back as ManagementBaseObject, which Core
+            // can't see — project them to nested WmiObjects so collectors can read them like any other row.
+            dict[prop.Name] = prop.Value switch
+            {
+                ManagementBaseObject embedded => ToWmiObject(embedded),
+                ManagementBaseObject[] arr => arr.Select(ToWmiObject).ToArray(),
+                var v => v,
+            };
+        }
         return new WmiObject(dict);
     }
 

@@ -150,4 +150,138 @@ public class ExportTests
         }
         finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
     }
+
+    // --- Phase 3 additions: every new group and the open-port list round-trip through JSON and land in CSV ---
+
+    private static Machine RichMachine()
+    {
+        var m = SampleMachine();
+        m.OpenPorts.Add(445); m.OpenPorts.Add(135);
+        m.Hotfixes.Add(new HotfixEntry { Id = "KB5040442", InstalledOn = new DateTime(2024, 7, 10), Description = "Security Update" });
+        m.Updates.DisplayVersion = "23H2"; m.Updates.Ubr = 4037; m.Updates.FullBuild = "10.0.22631.4037";
+        m.Updates.HotfixCount = 1; m.Updates.LastHotfixDate = new DateTime(2024, 7, 10);
+        m.Updates.PendingReboot = true; m.Updates.PendingRebootReasons = "Windows Update";
+        m.Antivirus.Add(new AntivirusEntry { Product = "Windows Defender", Enabled = true, UpToDate = true });
+        m.Security.DefenderEnabled = true; m.Security.FirewallDomain = true; m.Security.FirewallPublic = false;
+        m.Security.BitLockerVolumes.Add(new BitLockerVolumeEntry { Letter = "C:", Protection = "On", Method = "XTS-AES 256" });
+        m.Security.TpmPresent = true; m.Security.TpmVersion = "2.0"; m.Security.SecureBoot = true; m.Security.FirmwareType = "UEFI";
+        m.Security.RdpEnabled = true; m.Security.RdpNlaRequired = true; m.Security.Smb1Enabled = false;
+        m.LocalAccounts.Add(new LocalAccountEntry { Name = "jdoe", IsAdmin = true, LastLogon = new DateTime(2024, 8, 1) });
+        m.LocalAdministrators.Add("PC-A\\jdoe");
+        m.UserProfiles.Add(new UserProfileEntry { User = "jdoe", LocalPath = "C:\\Users\\jdoe", LastUse = new DateTime(2024, 8, 1), Loaded = true });
+        m.LogonSessions.Add(new LogonSessionEntry { Account = "CORP\\jdoe", LogonType = "Interactive" });
+        m.Services.Add(new ServiceEntry { Name = "Spooler", DisplayName = "Print Spooler", State = "Running", StartMode = "Auto", Account = "LocalSystem" });
+        m.Services.Add(new ServiceEntry { Name = "Acme", DisplayName = "Acme", State = "Stopped", StartMode = "Auto" });
+        m.StartupItems.Add(new StartupEntry { Name = "OneDrive", Command = "OneDrive.exe", Location = "HKCU\\...\\Run", User = "jdoe" });
+        m.ScheduledTasks.Add(new ScheduledTaskEntry { Name = "Backup", Path = "\\Acme\\", State = "Ready", RunAs = "svc" });
+        m.Monitors.Add(new MonitorEntry { Manufacturer = "Dell", Model = "U2415", Serial = "ABC123", Year = 2019, DiagonalInches = 24.0, Active = true });
+        m.Gpus.Add(new GpuInfo { Name = "NVIDIA RTX A2000", VramBytes = 6442450944, DriverVersion = "31.0", Resolution = "1920x1200 @ 60 Hz" });
+        m.Printers.Add(new PrinterEntry { Name = "HP LaserJet", IsDefault = true, PortName = "IP_10.0.0.50", HostAddress = "10.0.0.50" });
+        m.UsbDevices.Add(new UsbDeviceEntry { Name = "SanDisk Cruzer", Manufacturer = "SanDisk", PnpClass = "USB" });
+        m.UsbStorageHistory.Add(new UsbStorageHistoryEntry { FriendlyName = "SanDisk Cruzer USB Device", Vendor = "SanDisk", Product = "Cruzer", Serial = "4C53" });
+        m.Battery = new BatteryInfo { Name = "DELL 1VX1H", ChargePercent = 87, HealthPercent = 75, CycleCount = 210 };
+        m.ThermalTempC = 40;
+        m.Disks[0].MediaType = "SSD"; m.Disks[0].BusType = "NVMe"; m.Disks[0].HealthStatus = "Healthy"; m.Disks[0].TempC = 38;
+        m.RefreshCounts();
+        return m;
+    }
+
+    [Fact]
+    public void Json_RoundTrips_Phase3Groups_AndOpenPorts()
+    {
+        var json = new JsonExporter().Serialize(Doc(RichMachine()));
+        var back = new JsonExporter().Deserialize(json).ToMachines()[0];
+
+        Assert.Equal(new[] { 135, 445 }, back.OpenPorts.OrderBy(p => p));
+        Assert.Single(back.Hotfixes);
+        Assert.Equal("10.0.22631.4037", back.Updates.FullBuild);
+        Assert.True(back.Updates.PendingReboot);
+        Assert.Equal("Yes", back.Updates.PendingRebootDisplay);
+        Assert.Single(back.Antivirus);
+        Assert.Contains("Windows Defender (on)", back.AntivirusSummary);
+        Assert.True(back.Security.DefenderEnabled);
+        Assert.Single(back.Security.BitLockerVolumes);
+        Assert.Equal("C: On (XTS-AES 256)", back.Security.BitLockerSummary);
+        Assert.Equal("2.0", back.Security.TpmVersion);
+        Assert.Equal("Enabled, NLA required", back.Security.RdpSummary);
+        Assert.Single(back.LocalAccounts);
+        Assert.True(back.LocalAccounts[0].IsAdmin);
+        Assert.Equal(new[] { "PC-A\\jdoe" }, back.LocalAdministrators);
+        Assert.Single(back.UserProfiles);
+        Assert.Single(back.LogonSessions);
+        Assert.Equal(2, back.Services.Count);
+        Assert.Equal(1, back.StoppedAutoServiceCount);
+        Assert.Single(back.StartupItems);
+        Assert.Single(back.ScheduledTasks);
+        Assert.Single(back.Monitors);
+        Assert.Equal("ABC123", back.Monitors[0].Serial);
+        Assert.Single(back.Gpus);
+        Assert.Equal(6442450944, back.Gpus[0].VramBytes);
+        Assert.Single(back.Printers);
+        Assert.Single(back.UsbDevices);
+        Assert.Single(back.UsbStorageHistory);
+        Assert.NotNull(back.Battery);
+        Assert.Equal(75, back.Battery!.HealthPercent);
+        Assert.Equal(40, back.ThermalTempC);
+        Assert.Equal("SSD", back.Disks[0].MediaType);
+        Assert.Equal(38, back.Disks[0].TempC);
+
+        // Computed members are not persisted (they'd be noise, and can't be set back anyway).
+        Assert.DoesNotContain("\"BitLockerSummary\"", json);
+        Assert.DoesNotContain("\"HasData\"", json);
+    }
+
+    [Fact]
+    public void Json_PreviousSchema_WithoutPhase3Fields_StillOpens()
+    {
+        // Serialise with the current writer, then strip the new fields to mimic an older file.
+        var doc = Doc(SampleMachine());
+        var json = new JsonExporter().Serialize(doc);
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+        var machine = node["Machines"]![0]!.AsObject();
+        foreach (var key in new[] { "OpenPorts", "Hotfixes", "Antivirus", "Updates", "Security", "LocalAccounts", "Services", "Monitors", "Battery" })
+            machine.Remove(key);
+
+        var back = new JsonExporter().Deserialize(node.ToJsonString()).ToMachines()[0];
+        Assert.Equal("PC-A", back.Name);
+        Assert.Empty(back.Hotfixes);
+        Assert.NotNull(back.Updates);   // fresh empty group, never null
+        Assert.NotNull(back.Security);
+        Assert.Null(back.Battery);
+        Assert.Empty(back.OpenPorts);
+    }
+
+    [Fact]
+    public void Csv_WritesCompanionFiles_AndHeadlineColumns()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "marco-test-" + Guid.NewGuid().ToString("N")[..8]);
+        try
+        {
+            var files = new CsvExporter().Export(Doc(RichMachine()), dir);
+            foreach (var f in new[] { "security.csv", "hotfixes.csv", "services.csv", "startup.csv", "accounts.csv", "profiles.csv", "monitors.csv", "gpus.csv", "printers.csv", "usb.csv" })
+                Assert.Contains(files, p => p.EndsWith(f));
+
+            var machines = File.ReadAllLines(Path.Combine(dir, "machines.csv"));
+            Assert.Contains("PendingReboot", machines[0]);
+            Assert.Contains("BitLocker", machines[0]);
+            Assert.Contains(",23H2,10.0.22631.4037,", machines[1]);
+            Assert.Contains("Windows Defender (on)", machines[1]);
+            Assert.Contains("C: On (XTS-AES 256)", machines[1]);
+            Assert.Contains("135 445", machines[1]);
+
+            var security = File.ReadAllLines(Path.Combine(dir, "security.csv"));
+            Assert.StartsWith("MachineAddress,MachineName,Antivirus,", security[0]);
+            Assert.Contains(security, l => l.StartsWith("10.0.0.10,PC-A,Windows Defender,Yes,Yes,"));
+
+            var accounts = File.ReadAllLines(Path.Combine(dir, "accounts.csv"));
+            Assert.Contains(accounts, l => l.StartsWith("10.0.0.10,PC-A,jdoe,") && l.Contains(",Yes,2024-08-01"));
+
+            var monitors = File.ReadAllLines(Path.Combine(dir, "monitors.csv"));
+            Assert.Contains(monitors, l => l.Contains(",Dell,U2415,ABC123,"));
+
+            var usb = File.ReadAllLines(Path.Combine(dir, "usb.csv"));
+            Assert.Contains(usb, l => l.Contains(",StorageHistory,SanDisk Cruzer USB Device,"));
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
 }

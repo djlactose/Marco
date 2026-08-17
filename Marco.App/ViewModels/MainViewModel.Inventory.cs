@@ -211,7 +211,9 @@ public partial class MainViewModel
             ProgressFraction = 0;
 
             var candidates = ResolveCandidates();
-            _runLog.Note($"Inventory of {targets.Count} host(s) started.");
+            // Snapshot the checklist once per run so a toggle mid-run can't give two hosts different collector sets.
+            var enabledCollectors = EnabledCollectorNames();
+            _runLog.Note($"Inventory of {targets.Count} host(s) started; collectors: {string.Join(",", enabledCollectors.OrderBy(n => n))}.");
 
             var options = new System.Threading.Tasks.ParallelOptions
             {
@@ -260,8 +262,8 @@ public partial class MainViewModel
                         else
                         {
                             outcome = isLinux
-                                ? await _linuxInventory.InventoryAsync(m, applicable, null, null, token).ConfigureAwait(false)
-                                : await _inventory.InventoryAsync(m, applicable, null, null, token).ConfigureAwait(false);
+                                ? await _linuxInventory.InventoryAsync(m, applicable, null, enabledCollectors, token).ConfigureAwait(false)
+                                : await _inventory.InventoryAsync(m, applicable, null, enabledCollectors, token).ConfigureAwait(false);
                         }
                     }
                 }

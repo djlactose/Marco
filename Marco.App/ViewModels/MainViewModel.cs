@@ -38,6 +38,30 @@ public partial class MainViewModel : ObservableObject
     /// <summary>The machine's own NIC subnets, suggested as one-click scan targets.</summary>
     public ObservableCollection<Marco.Discovery.LocalSubnet> SuggestedNetworks { get; } = new();
 
+    /// <summary>The inventory collector checklist (catalogue order). Both runners receive the enabled names, so a
+    /// collector unticked here is skipped on every host; heavier ones default off (see CollectorCatalog).</summary>
+    public ObservableCollection<CollectorOption> Collectors { get; } = new();
+
+    /// <summary>"Inventory collectors (10 of 14 enabled)" for the checklist's expander header.</summary>
+    public string CollectorSummary =>
+        $"Inventory collectors ({Collectors.Count(c => c.IsEnabled)} of {Collectors.Count} enabled)";
+
+    /// <summary>The names both runners should run — what the checklist currently says.</summary>
+    private HashSet<string> EnabledCollectorNames()
+        => new(Collectors.Where(c => c.IsEnabled).Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
+
+    private void BuildCollectorOptions(IReadOnlyDictionary<string, bool>? overrides)
+    {
+        var enabled = CollectorCatalog.EnabledNames(overrides);
+        Collectors.Clear();
+        foreach (var info in CollectorCatalog.All)
+        {
+            var option = new CollectorOption(info, enabled.Contains(info.Name));
+            option.Changed += () => OnPropertyChanged(nameof(CollectorSummary));
+            Collectors.Add(option);
+        }
+    }
+
     private IReadOnlyList<string> _lastRanges = Array.Empty<string>();
 
     /// <summary>The target tokens of the scan currently in the grid (started here or loaded from a file). Drives
@@ -92,6 +116,7 @@ public partial class MainViewModel : ObservableObject
     private ScanProgress? _lastProgress;
 
     public string StorageLocation => _paths.Reason;
+
 
     public string Title
     {
@@ -152,6 +177,7 @@ public partial class MainViewModel : ObservableObject
         _groupByBlock = s.GroupByBlock;
         _includeBetaSetting = s.IncludeBetaUpdates;
         _includeBetaUpdates = s.IncludeBetaUpdates ?? Marco.Core.AppVersion.IsBeta;
+        BuildCollectorOptions(s.CollectorOverrides);
     }
 #pragma warning restore MVVMTK0034
 
@@ -169,9 +195,11 @@ public partial class MainViewModel : ObservableObject
         IncludeUnreachable = IncludeUnreachable,
         AutoInventory = AutoInventory,
         GroupByBlock = GroupByBlock,
+        CollectorOverrides = CollectorCatalog.OverridesFor(EnabledCollectorNames()),
     });
 
     partial void OnFilterTextChanged(string value) => MachinesView.Refresh();
+
 
     partial void OnGroupByBlockChanged(bool value) => ApplyGrouping();
 

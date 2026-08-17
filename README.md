@@ -20,16 +20,37 @@ in a sortable, filterable grid and export to CSV and JSON.
 - **Discovery:** liveness (ICMP + TCP fallback), reverse DNS / NBNS naming, ARP MAC + OUI vendor, device type.
 - **Inventory (Windows hosts, over WMI/DCOM):** system (make/model/serial/chassis/BIOS/motherboard), OS
   (edition/version/build/arch/install date/uptime), current-or-last logged-on user, CPU(s), memory (total +
-  per-slot), storage (physical disks + logical volumes), network adapters (IP/MAC/speed/DHCP/DNS/gateway), and
+  per-slot), storage (physical disks with SSD/HDD/NVMe type, bus, health, SMART, temperature and wear where the
+  system exposes them; logical volumes), network adapters (IP/MAC/speed/DHCP/DNS/gateway), and
   **installed software** from the registry uninstall keys (64-bit, 32-bit, per-user), deduplicated to match
   Programs and Features. Software reads use the SMB/Remote-Registry path when available and fall back to
   StdRegProv-over-WMI when it isn't (e.g. over a VPN, or when the Remote Registry service is off).
+  - **Updates & servicing:** installed hotfixes, feature release (22H2/24H2…) and full build incl. UBR,
+    pending-reboot flags (servicing stack, Windows Update, file renames, computer rename, domain join), WSUS /
+    Automatic Updates policy.
+  - **Security posture:** antivirus / antispyware / firewall products (Security Center) and Defender status
+    (real-time protection, signature age, last scan, tamper protection), firewall profiles, BitLocker per volume,
+    TPM version, Secure Boot and UEFI/BIOS, UAC, Remote Desktop + NLA, SMB1 / signing / encryption,
+    virtualization-based security (Credential Guard, HVCI), and whether LAPS manages the machine (never the
+    password). Everything is read-only, and a value that could not be determined stays blank rather than "off".
+  - **Users:** local accounts, members of the local Administrators group, user profiles on disk with last use,
+    every interactive / RDP session (not just the console user), per-account last logon.
+  - **Services & startup:** Windows services (state, start mode, run-as account, path) with an "automatic but
+    stopped" count, startup items, and — off by default — non-Microsoft scheduled tasks.
+  - **Peripherals:** monitors with EDID make/model/**serial**/size, GPUs (VRAM, driver), printers (with the TCP/IP
+    port address), attached USB devices, battery health (full-charge vs design capacity, cycles), ACPI thermal
+    zone, and — off by default — the USB storage devices ever connected.
 - **Inventory (Linux/Unix hosts, over SSH):** OS (distro/version/kernel/arch), hostname, CPU, memory, storage
   (lsblk + df), network adapters, current/last login, and installed packages (dpkg / rpm / apk). Password auth;
   the runner routes by device type automatically (Windows→WMI, Linux→SSH).
 
-Additional collectors (services, antivirus, printers, USB, hotfixes, drive/CPU temperatures), the itemization
-tool, HTML/SQLite export, AD browse, and saved-scan history are planned for later phases.
+Each collector can be switched on or off in the left panel ("Inventory collectors"); the choice persists and is
+recorded in the run log. Heavier or audit-oriented collectors (scheduled tasks, USB history) default off. Sources
+that only exist on some SKUs — Security Center on client Windows, BitLocker on Pro/Enterprise, the Storage
+Management classes on Windows 8 / Server 2012 and later — are reported as "not available" notes rather than
+failures.
+
+The itemization tool, HTML/SQLite export, AD browse, and saved-scan history are planned for later phases.
 
 ---
 

@@ -22,4 +22,9 @@ public sealed record AppSettings
 
     /// <summary>Group the results grid into one collapsible section per target block (CIDR/range).</summary>
     public bool GroupByBlock { get; init; } = true;
+
+    /// <summary>Inventory collectors the operator has switched away from their catalogue default (name → enabled).
+    /// Only the differences are stored, so a collector added in a later version appears with its own default
+    /// (see <see cref="Inventory.CollectorCatalog"/>). Null/empty = all defaults.</summary>
+    public Dictionary<string, bool>? CollectorOverrides { get; init; }
 }

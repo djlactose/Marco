@@ -51,7 +51,28 @@ public sealed record MachineDto(
     IReadOnlyList<AdapterDto> Adapters,
     IReadOnlyList<SoftwareEntry> Software,
     IReadOnlyList<CollectorResultDto> Collectors,
-    string? TargetBlock = null)
+    string? TargetBlock = null,
+    // Schema additions (all optional so scans written by earlier versions still open). The list element types
+    // are the plain model classes: they carry only settable data properties, so they serialise as-is.
+    IReadOnlyList<int>? OpenPorts = null,
+    IReadOnlyList<HotfixEntry>? Hotfixes = null,
+    IReadOnlyList<AntivirusEntry>? Antivirus = null,
+    IReadOnlyList<PrinterEntry>? Printers = null,
+    IReadOnlyList<UsbDeviceEntry>? UsbDevices = null,
+    IReadOnlyList<UsbStorageHistoryEntry>? UsbStorageHistory = null,
+    UpdateInfo? Updates = null,
+    SecurityInfo? Security = null,
+    IReadOnlyList<LocalAccountEntry>? LocalAccounts = null,
+    IReadOnlyList<string>? LocalAdministrators = null,
+    IReadOnlyList<UserProfileEntry>? UserProfiles = null,
+    IReadOnlyList<LogonSessionEntry>? LogonSessions = null,
+    IReadOnlyList<ServiceEntry>? Services = null,
+    IReadOnlyList<StartupEntry>? StartupItems = null,
+    IReadOnlyList<ScheduledTaskEntry>? ScheduledTasks = null,
+    IReadOnlyList<MonitorEntry>? Monitors = null,
+    IReadOnlyList<GpuInfo>? Gpus = null,
+    BatteryInfo? Battery = null,
+    int? ThermalTempC = null)
 {
     public static MachineDto From(Machine m) => new(
         m.Address, m.Name, m.Fqdn, m.DeviceType, m.IsVirtual, m.Vendor,
@@ -62,14 +83,21 @@ public sealed record MachineDto(
         m.Cpus.ToList(), m.MemoryModules.ToList(), m.Disks.ToList(), m.Volumes.ToList(),
         m.Adapters.Select(AdapterDto.From).ToList(), m.Software.ToList(),
         m.Collectors.Select(c => new CollectorResultDto(c.Name, c.Status, c.Error)).ToList(),
-        m.TargetBlock);
+        m.TargetBlock,
+        m.OpenPorts.OrderBy(p => p).ToList(),
+        m.Hotfixes.ToList(), m.Antivirus.ToList(), m.Printers.ToList(), m.UsbDevices.ToList(), m.UsbStorageHistory.ToList(),
+        m.Updates, m.Security,
+        m.LocalAccounts.ToList(), m.LocalAdministrators.ToList(), m.UserProfiles.ToList(), m.LogonSessions.ToList(),
+        m.Services.ToList(), m.StartupItems.ToList(), m.ScheduledTasks.ToList(),
+        m.Monitors.ToList(), m.Gpus.ToList(), m.Battery, m.ThermalTempC);
 
     public Machine ToMachine()
     {
         var m = new Machine(Address) { Name = Name, Fqdn = Fqdn, DeviceType = DeviceType, IsVirtual = IsVirtual,
             Vendor = Vendor, Status = Status, StatusDetail = StatusDetail, DiscoveryMethod = DiscoveryMethod,
             IcmpTtl = IcmpTtl, LastScanned = LastScanned, TotalMemoryBytes = TotalMemoryBytes,
-            MemorySlotsUsed = MemorySlotsUsed, MemorySlotsTotal = MemorySlotsTotal, TargetBlock = TargetBlock };
+            MemorySlotsUsed = MemorySlotsUsed, MemorySlotsTotal = MemorySlotsTotal, TargetBlock = TargetBlock,
+            Battery = Battery, ThermalTempC = ThermalTempC };
         foreach (var ip in IpAddresses) if (!m.IpAddresses.Contains(ip)) m.IpAddresses.Add(ip);
         foreach (var mac in MacAddresses) m.MacAddresses.Add(mac);
         System.ApplyTo(m.System);
@@ -81,6 +109,23 @@ public sealed record MachineDto(
         m.Software.AddRange(Software);
         foreach (var a in Adapters) m.Adapters.Add(a.ToAdapter());
         foreach (var c in Collectors) m.SetCollector(c.Name, c.Status, c.Error);
+        if (OpenPorts is not null) foreach (var p in OpenPorts) m.OpenPorts.Add(p);
+        if (Hotfixes is not null) m.Hotfixes.AddRange(Hotfixes);
+        if (Antivirus is not null) m.Antivirus.AddRange(Antivirus);
+        if (Printers is not null) m.Printers.AddRange(Printers);
+        if (UsbDevices is not null) m.UsbDevices.AddRange(UsbDevices);
+        if (UsbStorageHistory is not null) m.UsbStorageHistory.AddRange(UsbStorageHistory);
+        if (Updates is not null) m.Updates = Updates;
+        if (Security is not null) m.Security = Security;
+        if (LocalAccounts is not null) m.LocalAccounts.AddRange(LocalAccounts);
+        if (LocalAdministrators is not null) m.LocalAdministrators.AddRange(LocalAdministrators);
+        if (UserProfiles is not null) m.UserProfiles.AddRange(UserProfiles);
+        if (LogonSessions is not null) m.LogonSessions.AddRange(LogonSessions);
+        if (Services is not null) m.Services.AddRange(Services);
+        if (StartupItems is not null) m.StartupItems.AddRange(StartupItems);
+        if (ScheduledTasks is not null) m.ScheduledTasks.AddRange(ScheduledTasks);
+        if (Monitors is not null) m.Monitors.AddRange(Monitors);
+        if (Gpus is not null) m.Gpus.AddRange(Gpus);
         m.RefreshCounts();
         return m;
     }

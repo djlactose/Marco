@@ -20,6 +20,11 @@ public sealed class LinuxInventoryRunner
     private readonly Dictionary<string, string> _remembered = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _lock = new();
 
+    /// <summary>The collector group names this runner reports (they double as the enable/disable keys and must
+    /// exist in <see cref="Marco.Core.Inventory.CollectorCatalog"/>).</summary>
+    public static readonly IReadOnlyList<string> CollectorNames = new[]
+        { "OperatingSystem", "System", "Cpu", "Memory", "Storage", "Network", "Users", "InstalledSoftware" };
+
     public LinuxInventoryRunner(ISshSessionFactory factory, int port = 22, int timeoutSeconds = 15)
     {
         _factory = factory;

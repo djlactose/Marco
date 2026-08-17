@@ -184,6 +184,29 @@
             <Button Content="Add credential…" Command="{Binding AddCredentialCommand}"
                     HorizontalAlignment="Left" Margin="0,6,0,0" />
 
+            <!-- Inventory collector checklist: collapsed by default, header carries the count. -->
+            <Expander Margin="0,12,0,0" IsExpanded="False" ToolTip="Choose which inventory collectors run on each host. Applies to the next inventory run.">
+              <Expander.Header>
+                <TextBlock Text="{Binding CollectorSummary}" FontWeight="SemiBold" />
+              </Expander.Header>
+              <ItemsControl ItemsSource="{Binding Collectors}" Margin="4,4,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <CheckBox IsChecked="{Binding IsEnabled}" Margin="0,2" ToolTip="{Binding ToolTipText}">
+                      <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding DisplayName}" />
+                        <Border Background="{StaticResource TagBackgroundBrush}" CornerRadius="2" Padding="4,0" Margin="6,0,0,0"
+                                VerticalAlignment="Center"
+                                Visibility="{Binding PlatformTag, Converter={StaticResource NotEmptyToVis}}">
+                          <TextBlock Text="{Binding PlatformTag}" FontSize="10" Foreground="{StaticResource AccentBrush}" />
+                        </Border>
+                      </StackPanel>
+                    </CheckBox>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Expander>
+
             <Separator Margin="0,14" />
 
             <!-- Enablement is driven by each command's CanExecute (IsScanning / IsCancelling), not by IsEnabled
@@ -333,6 +356,9 @@
             <DataGridTextColumn Header="OS" Binding="{Binding Os.Caption}" Width="170" />
             <DataGridTextColumn Header="OS Build" Binding="{Binding Os.Build}" Width="70" />
             <DataGridTextColumn Header="OS Version" Binding="{Binding Os.Version}" Width="90" />
+            <DataGridTextColumn Header="Release" Binding="{Binding Updates.DisplayVersion}" Width="65" />
+            <DataGridTextColumn Header="Reboot?" Binding="{Binding Updates.PendingRebootDisplay}" Width="60" />
+            <DataGridTextColumn Header="Antivirus" Binding="{Binding AntivirusSummary}" Width="160" />
             <DataGridTextColumn Header="RAM"
                                 Binding="{Binding TotalMemoryBytes, Converter={StaticResource BytesToGb}}" Width="70" />
             <DataGridTextColumn Header="CPUs" Binding="{Binding CpuCount}" Width="55" />
@@ -414,6 +440,53 @@
                       </StackPanel>
                     </UniformGrid>
 
+                    <!-- Updates & servicing / Security posture -->
+                    <UniformGrid Columns="2" Margin="0,10,0,0">
+                      <StackPanel Margin="0,0,20,0"
+                                  Visibility="{Binding Updates.HasData, Converter={StaticResource NotEmptyToVis}}">
+                        <TextBlock Text="Updates &amp; servicing" Style="{StaticResource SectionHeader}" Margin="0,0,0,4" />
+                        <TextBlock Text="{Binding Updates.BuildSummary}" TextWrapping="Wrap"
+                                   Visibility="{Binding Updates.BuildSummary, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding Updates.EditionId, StringFormat='Edition: {0}'}"
+                                   Visibility="{Binding Updates.EditionId, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding Updates.HotfixSummary}"
+                                   Visibility="{Binding Updates.HotfixSummary, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding Updates.PendingRebootReasons, StringFormat='Pending reboot: {0}'}" Foreground="Firebrick" FontWeight="SemiBold"
+                                   Visibility="{Binding Updates.PendingRebootReasons, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding Updates.WsusDisplay, StringFormat='WSUS: {0}'}"
+                                   Visibility="{Binding Updates.WsusDisplay, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding Updates.AutoUpdateOption, StringFormat='Automatic Updates: {0}'}"
+                                   Visibility="{Binding Updates.AutoUpdateOption, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding Updates.Notes}" Foreground="{StaticResource MutedBrush}" FontSize="11" TextWrapping="Wrap"
+                                   Visibility="{Binding Updates.Notes, Converter={StaticResource NotEmptyToVis}}" />
+                      </StackPanel>
+                      <StackPanel Visibility="{Binding Security.HasData, Converter={StaticResource NotEmptyToVis}}">
+                        <TextBlock Text="Security posture" Style="{StaticResource SectionHeader}" Margin="0,0,0,4" />
+                        <TextBlock Text="{Binding AntivirusSummary, StringFormat='Antivirus: {0}'}" TextWrapping="Wrap"
+                                   Visibility="{Binding AntivirusSummary, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding Security.DefenderSummary, StringFormat='Defender: {0}'}" TextWrapping="Wrap"
+                                   Visibility="{Binding Security.DefenderSummary, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding Security.FirewallSummary, StringFormat='Firewall: {0}'}"
+                                   Visibility="{Binding Security.FirewallSummary, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding Security.BitLockerSummary, StringFormat='BitLocker: {0}'}" TextWrapping="Wrap"
+                                   Visibility="{Binding Security.BitLockerSummary, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding Security.PlatformSummary, StringFormat='Platform: {0}'}"
+                                   Visibility="{Binding Security.PlatformSummary, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding Security.RdpSummary, StringFormat='Remote Desktop: {0}'}"
+                                   Visibility="{Binding Security.RdpSummary, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding Security.SmbSummary, StringFormat='SMB: {0}'}"
+                                   Visibility="{Binding Security.SmbSummary, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding Security.UacSummary, StringFormat='UAC: {0}'}"
+                                   Visibility="{Binding Security.UacSummary, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding Security.VbsSummary, StringFormat='VBS: {0}'}"
+                                   Visibility="{Binding Security.VbsSummary, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding Security.LapsSummary, StringFormat='LAPS: {0}'}"
+                                   Visibility="{Binding Security.LapsSummary, Converter={StaticResource NotEmptyToVis}}" />
+                        <TextBlock Text="{Binding Security.Notes}" Foreground="{StaticResource MutedBrush}" FontSize="11" TextWrapping="Wrap"
+                                   Visibility="{Binding Security.Notes, Converter={StaticResource NotEmptyToVis}}" />
+                      </StackPanel>
+                    </UniformGrid>
+
                     <!-- CPU / Memory -->
                     <TextBlock Text="Processors" Style="{StaticResource SectionHeader}" Margin="0,10,0,4"
                                Visibility="{Binding CpuCount, Converter={StaticResource NotEmptyToVis}}" />
@@ -436,8 +509,8 @@
                     <ItemsControl ItemsSource="{Binding Disks}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                          <TextBlock>
-                            <Run Text="{Binding Model, Mode=OneWay}" /><Run Text=" — " /><Run Text="{Binding SizeBytes, Mode=OneWay, Converter={StaticResource BytesToGb}}" /><Run Text="  [" /><Run Text="{Binding SmartStatus, Mode=OneWay}" /><Run Text="]" />
+                          <TextBlock TextWrapping="Wrap">
+                            <Run Text="{Binding Model, Mode=OneWay}" /><Run Text=" — " /><Run Text="{Binding SizeBytes, Mode=OneWay, Converter={StaticResource BytesToGb}}" /><Run Text="  " /><Run Text="{Binding KindDisplay, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="  [" /><Run Text="{Binding HealthDisplay, Mode=OneWay}" /><Run Text="]" />
                           </TextBlock>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
@@ -464,6 +537,179 @@
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <!-- Users -->
+                    <TextBlock Text="Users" Style="{StaticResource SectionHeader}" Margin="0,10,0,4"
+                               Visibility="{Binding LocalAdministratorsDisplay, Converter={StaticResource NotEmptyToVis}}" />
+                    <TextBlock Text="{Binding LocalAdministratorsDisplay, StringFormat='Local Administrators: {0}'}" TextWrapping="Wrap"
+                               Visibility="{Binding LocalAdministratorsDisplay, Converter={StaticResource NotEmptyToVis}}" />
+                    <ItemsControl ItemsSource="{Binding LogonSessions}" Margin="0,2,0,0">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock>
+                            <Run Text="Signed in: " /><Run Text="{Binding Account, Mode=OneWay}" /><Run Text=" (" /><Run Text="{Binding LogonType, Mode=OneWay}" /><Run Text=")" />
+                          </TextBlock>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Expander Margin="0,4,0,0" IsExpanded="False"
+                              Visibility="{Binding LocalAccountCount, Converter={StaticResource NotEmptyToVis}}">
+                      <Expander.Header>
+                        <TextBlock Text="{Binding LocalAccountCount, StringFormat='Local accounts ({0})'}" />
+                      </Expander.Header>
+                      <ItemsControl ItemsSource="{Binding LocalAccounts}" Margin="18,2,0,0">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                            <Grid Margin="0,1">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*" />
+                                <ColumnDefinition Width="3*" />
+                              </Grid.ColumnDefinitions>
+                              <TextBlock Grid.Column="0" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                              <TextBlock Grid.Column="1" Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis">
+                                <Run Text="{Binding Flags, Mode=OneWay}" />
+                              </TextBlock>
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Expander>
+                    <Expander Margin="0,2,0,0" IsExpanded="False"
+                              Visibility="{Binding UserProfiles, Converter={StaticResource NotEmptyToVis}}">
+                      <Expander.Header>
+                        <TextBlock Text="{Binding UserProfiles.Count, StringFormat='User profiles ({0})'}" />
+                      </Expander.Header>
+                      <ItemsControl ItemsSource="{Binding UserProfiles}" Margin="18,2,0,0">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                            <TextBlock>
+                              <Run Text="{Binding User, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding LastUse, Mode=OneWay, StringFormat='last used {0:yyyy-MM-dd}'}" Foreground="{StaticResource MutedBrush}" /><Run Text="  " /><Run Text="{Binding LocalPath, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" />
+                            </TextBlock>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Expander>
+
+                    <!-- Services / startup / tasks -->
+                    <Expander Margin="0,10,0,0" IsExpanded="False"
+                              Visibility="{Binding ServiceCount, Converter={StaticResource NotEmptyToVis}}">
+                      <Expander.Header>
+                        <TextBlock Style="{StaticResource SectionHeader}" Text="{Binding ServicesSummary, StringFormat='Services — {0}'}" />
+                      </Expander.Header>
+                      <ItemsControl ItemsSource="{Binding Services}" Margin="18,2,0,0">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                            <Grid Margin="0,1">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="3*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="2*" />
+                              </Grid.ColumnDefinitions>
+                              <TextBlock Grid.Column="0" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" />
+                              <TextBlock Grid.Column="1" Text="{Binding State}" Foreground="{StaticResource MutedBrush}" />
+                              <TextBlock Grid.Column="2" Text="{Binding StartMode}" Foreground="{StaticResource MutedBrush}" />
+                              <TextBlock Grid.Column="3" Text="{Binding Account}" Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis" />
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Expander>
+                    <Expander Margin="0,2,0,0" IsExpanded="False"
+                              Visibility="{Binding StartupItems, Converter={StaticResource NotEmptyToVis}}">
+                      <Expander.Header>
+                        <TextBlock Text="{Binding StartupItems.Count, StringFormat='Startup items ({0})'}" />
+                      </Expander.Header>
+                      <ItemsControl ItemsSource="{Binding StartupItems}" Margin="18,2,0,0">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                            <TextBlock TextTrimming="CharacterEllipsis" ToolTip="{Binding Command}">
+                              <Run Text="{Binding Name, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding Location, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="  " /><Run Text="{Binding User, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" />
+                            </TextBlock>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Expander>
+                    <Expander Margin="0,2,0,0" IsExpanded="False"
+                              Visibility="{Binding ScheduledTasks, Converter={StaticResource NotEmptyToVis}}">
+                      <Expander.Header>
+                        <TextBlock Text="{Binding ScheduledTasks.Count, StringFormat='Scheduled tasks (non-Microsoft) ({0})'}" />
+                      </Expander.Header>
+                      <ItemsControl ItemsSource="{Binding ScheduledTasks}" Margin="18,2,0,0">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                            <TextBlock TextTrimming="CharacterEllipsis">
+                              <Run Text="{Binding Path, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="{Binding Name, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding State, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="  runs as " /><Run Text="{Binding RunAs, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" />
+                            </TextBlock>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Expander>
+
+                    <!-- Peripherals -->
+                    <TextBlock Text="Peripherals" Style="{StaticResource SectionHeader}" Margin="0,10,0,4"
+                               Visibility="{Binding Gpus, Converter={StaticResource NotEmptyToVis}}" />
+                    <ItemsControl ItemsSource="{Binding Gpus}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock TextWrapping="Wrap">
+                            <Run Text="GPU: " /><Run Text="{Binding Name, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding VramBytes, Mode=OneWay, Converter={StaticResource BytesToGb}}" Foreground="{StaticResource MutedBrush}" /><Run Text="  driver " /><Run Text="{Binding DriverVersion, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="  " /><Run Text="{Binding Resolution, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" />
+                          </TextBlock>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <ItemsControl ItemsSource="{Binding Monitors}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock TextWrapping="Wrap">
+                            <Run Text="Monitor: " /><Run Text="{Binding Manufacturer, Mode=OneWay}" /><Run Text=" " /><Run Text="{Binding Model, Mode=OneWay}" /><Run Text="  S/N " /><Run Text="{Binding Serial, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding DiagonalInches, Mode=OneWay, StringFormat='{}{0} in'}" Foreground="{StaticResource MutedBrush}" /><Run Text=" " /><Run Text="{Binding Year, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" />
+                          </TextBlock>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="{Binding Battery.Summary}"
+                               Visibility="{Binding Battery, Converter={StaticResource NotEmptyToVis}}" />
+                    <TextBlock Text="{Binding ThermalTempC, StringFormat='Thermal zone: {0} °C'}"
+                               Visibility="{Binding ThermalTempC, Converter={StaticResource NotEmptyToVis}}" />
+                    <ItemsControl ItemsSource="{Binding Printers}" Margin="0,2,0,0">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock TextTrimming="CharacterEllipsis">
+                            <Run Text="Printer: " /><Run Text="{Binding Name, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding PortName, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text=" " /><Run Text="{Binding HostAddress, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="  " /><Run Text="{Binding DriverName, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" />
+                          </TextBlock>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Expander Margin="0,2,0,0" IsExpanded="False"
+                              Visibility="{Binding UsbDevices, Converter={StaticResource NotEmptyToVis}}">
+                      <Expander.Header>
+                        <TextBlock Text="{Binding UsbDevices.Count, StringFormat='USB devices ({0})'}" />
+                      </Expander.Header>
+                      <ItemsControl ItemsSource="{Binding UsbDevices}" Margin="18,2,0,0">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                            <TextBlock TextTrimming="CharacterEllipsis" ToolTip="{Binding DeviceId}">
+                              <Run Text="{Binding Name, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding Manufacturer, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="  " /><Run Text="{Binding PnpClass, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" />
+                            </TextBlock>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Expander>
+                    <Expander Margin="0,2,0,0" IsExpanded="False"
+                              Visibility="{Binding UsbStorageHistory, Converter={StaticResource NotEmptyToVis}}">
+                      <Expander.Header>
+                        <TextBlock Text="{Binding UsbStorageHistory.Count, StringFormat='USB storage history ({0})'}" />
+                      </Expander.Header>
+                      <ItemsControl ItemsSource="{Binding UsbStorageHistory}" Margin="18,2,0,0">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                            <TextBlock TextTrimming="CharacterEllipsis">
+                              <Run Text="{Binding FriendlyName, Mode=OneWay}" /><Run Text="  S/N " /><Run Text="{Binding Serial, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" />
+                            </TextBlock>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Expander>
 
                     <!-- Software -->
                     <TextBlock Style="{StaticResource SectionHeader}" Margin="0,10,0,4"
