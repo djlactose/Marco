@@ -117,6 +117,11 @@ public partial class MainViewModel : ObservableObject
 
     public string StorageLocation => _paths.Reason;
 
+    /// <summary>The largest Concurrency this PC can safely run (see <see cref="ConcurrencyLimits"/>); the box snaps to it.</summary>
+    public int MaxConcurrency => ConcurrencyLimits.Max;
+
+    /// <summary>Why <see cref="MaxConcurrency"/> is what it is — shown as the tooltip on the Concurrency box.</summary>
+    public string ConcurrencyExplanation => ConcurrencyLimits.Explanation;
 
     public string Title
     {
@@ -166,7 +171,7 @@ public partial class MainViewModel : ObservableObject
     private void ApplySettings(AppSettings s)
     {
         _targetsText = s.TargetsText;
-        _concurrency = s.Concurrency;
+        _concurrency = Math.Clamp(s.Concurrency, 1, ConcurrencyLimits.Max); // settings.json may come from a bigger machine
         _icmpEnabled = s.IcmpEnabled;
         _tcpFallback = s.TcpFallback;
         _classification = s.Classification;
@@ -200,6 +205,17 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnFilterTextChanged(string value) => MachinesView.Refresh();
 
+    /// <summary>Silent snap into [1, <see cref="MaxConcurrency"/>]. The generated setter is equality-guarded, so the
+    /// nested assignment re-enters this hook once with an in-range value and stops.</summary>
+    partial void OnConcurrencyChanged(int value)
+    {
+        int clamped = Math.Clamp(value, 1, ConcurrencyLimits.Max);
+        if (clamped == value) return;
+        Concurrency = clamped;
+        StatusLine = value > clamped
+            ? $"Concurrency capped at {clamped} — the most this PC can sustain."
+            : "Concurrency must be at least 1.";
+    }
 
     partial void OnGroupByBlockChanged(bool value) => ApplyGrouping();
 
@@ -485,7 +501,7 @@ public partial class MainViewModel : ObservableObject
 
     private ScanSettings BuildSettings() => new()
     {
-        DiscoveryConcurrency = Math.Max(1, Concurrency),
+        DiscoveryConcurrency = Math.Clamp(Concurrency, 1, ConcurrencyLimits.Max),
         IcmpEnabled = IcmpEnabled,
         TcpFallbackEnabled = TcpFallback,
         ClassificationEnabled = Classification,

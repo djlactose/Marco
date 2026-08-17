@@ -73,7 +73,7 @@ public sealed class ScanController
 
         var options = new ParallelOptions
         {
-            MaxDegreeOfParallelism = Math.Max(1, settings.DiscoveryConcurrency),
+            MaxDegreeOfParallelism = settings.EffectiveDiscoveryConcurrency,
             CancellationToken = ct,
         };
 

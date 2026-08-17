@@ -357,4 +357,33 @@ public class ScanControllerTests
         Assert.Equal(emitted.Count, last.Alive);
         Assert.True(last.Completed < 20);
     }
+
+    // --- Concurrency cap ---------------------------------------------------------------------------------------
+
+    /// <summary>The requested degree of parallelism is clamped to ScanSettings.MaxConcurrency (and floored at 1):
+    /// while every host is parked in the probe, exactly the effective count are in flight.</summary>
+    [Theory]
+    [InlineData(50, 4, 4)]  // over the cap → cap
+    [InlineData(3, 4, 3)]   // under the cap → as requested
+    [InlineData(0, 4, 1)]   // nonsense → still one host at a time
+    public async Task Discovery_InFlight_IsClampedToMaxConcurrency(int requested, int max, int expected)
+    {
+        var gates = new ProbeGates();
+        var liveness = new FakeLivenessProbe { BeforeProbe = gates.WaitAsync };
+        var addrs = Enumerable.Range(1, 10).Select(i => $"10.0.0.{i}").ToArray();
+        // Pre-create every gate so ReleaseAll also frees the hosts that haven't reached the probe yet.
+        foreach (var a in addrs) gates.For(a);
+
+        var settings = new ScanSettings { DiscoveryConcurrency = requested, MaxConcurrency = max };
+        var run = Build(liveness).RunDiscoveryAsync(
+            Targets(addrs), settings, addrs.Length, false, _ => { }, null, null, default);
+
+        await WaitUntilAsync(() => liveness.Calls.Count >= expected);
+        await Task.Delay(150); // give the loop every chance to (wrongly) start more
+        Assert.Equal(expected, liveness.Calls.Count); // Calls is added before the gate await, so this is the in-flight count
+
+        gates.ReleaseAll();
+        await run;
+        Assert.Equal(addrs.Length, liveness.Calls.Count);
+    }
 }

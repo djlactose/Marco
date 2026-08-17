@@ -69,7 +69,10 @@ Data (settings, logs, the run log, credential profiles, saved scans) is written 
 > decrypt on another — that is the intended security property, not a bug. Re-enter credentials on the new machine.
 
 Scan options (targets, discovery toggles, concurrency, the beta-updates choice) persist in `settings.json` in the
-same data folder.
+same data folder. Concurrency is capped automatically at what the machine can sustain — derived from its logical
+processors and the ephemeral TCP port range, since each in-flight host opens up to 11 TCP probes at once. The cap is
+shown beside the box, and an out-of-range value (typed, or loaded from a `settings.json` saved on a bigger machine)
+snaps to it.
 
 ---
 

@@ -217,7 +217,7 @@ public partial class MainViewModel
 
             var options = new System.Threading.Tasks.ParallelOptions
             {
-                MaxDegreeOfParallelism = Math.Max(1, BuildSettings().InventoryConcurrency),
+                MaxDegreeOfParallelism = BuildSettings().EffectiveInventoryConcurrency,
                 CancellationToken = _cts.Token,
             };
 

@@ -11,6 +11,10 @@ public sealed record AppSettings
     public bool? IncludeBetaUpdates { get; init; }
 
     public string TargetsText { get; init; } = "";
+
+    /// <summary>Hosts in flight during discovery. Not validated here — the file round-trips as written — but the
+    /// UI clamps it to [1, <see cref="Scanning.ConcurrencyLimits.Max"/>] when applied, so a value saved on a
+    /// bigger machine snaps down on a smaller one.</summary>
     public int Concurrency { get; init; } = 32;
     public bool IcmpEnabled { get; init; } = true;
     public bool TcpFallback { get; init; } = true;

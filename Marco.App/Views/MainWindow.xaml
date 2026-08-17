@@ -141,7 +141,10 @@
 
             <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
               <TextBlock Text="Concurrency" VerticalAlignment="Center" Margin="0,0,8,0" />
-              <TextBox Text="{Binding Concurrency}" Width="60" />
+              <TextBox Text="{Binding Concurrency}" Width="60" ToolTip="{Binding ConcurrencyExplanation}" />
+              <TextBlock Text="{Binding MaxConcurrency, Mode=OneWay, StringFormat='max {0} on this PC'}" VerticalAlignment="Center"
+                         Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="8,0,0,0"
+                         ToolTip="{Binding ConcurrencyExplanation}" />
             </StackPanel>
 
             <Separator Margin="0,14" />

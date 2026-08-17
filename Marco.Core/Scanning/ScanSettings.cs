@@ -3,12 +3,24 @@ namespace Marco.Core.Scanning;
 /// <summary>Operator-tunable knobs for a scan run. Defaults are LAN-sensible; lower the concurrency for WAN.</summary>
 public sealed class ScanSettings
 {
-    /// <summary>Concurrent hosts during discovery (cheap ping/TCP work).</summary>
+    /// <summary>Concurrent hosts during discovery (cheap ping/TCP work). Clamped to
+    /// [1, <see cref="MaxConcurrency"/>] at run time — see <see cref="EffectiveDiscoveryConcurrency"/>.</summary>
     public int DiscoveryConcurrency { get; set; } = 32;
 
     /// <summary>Concurrent hosts during inventory — deliberately lower than discovery, since each host is a
-    /// DCOM auth plus dozens of WMI queries plus a bulk registry read and 32-wide can swamp a WAN link.</summary>
+    /// DCOM auth plus dozens of WMI queries plus a bulk registry read and 32-wide can swamp a WAN link. Clamped
+    /// to [1, <see cref="MaxConcurrency"/>] at run time — see <see cref="EffectiveInventoryConcurrency"/>.</summary>
     public int InventoryConcurrency { get; set; } = 16;
+
+    /// <summary>Ceiling applied to both concurrency knobs when a run starts. Defaults to what this machine can
+    /// safely sustain (<see cref="ConcurrencyLimits.Max"/>); tests lower it to make the clamp observable.</summary>
+    public int MaxConcurrency { get; set; } = ConcurrencyLimits.Max;
+
+    /// <summary>What discovery actually runs at: <see cref="DiscoveryConcurrency"/> clamped to [1, max].</summary>
+    public int EffectiveDiscoveryConcurrency => Math.Clamp(DiscoveryConcurrency, 1, Math.Max(1, MaxConcurrency));
+
+    /// <summary>What inventory actually runs at: <see cref="InventoryConcurrency"/> clamped to [1, max].</summary>
+    public int EffectiveInventoryConcurrency => Math.Clamp(InventoryConcurrency, 1, Math.Max(1, MaxConcurrency));
 
     public bool IcmpEnabled { get; set; } = true;
 
