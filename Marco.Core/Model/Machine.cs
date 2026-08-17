@@ -19,6 +19,15 @@ public sealed class Machine : ObservableBase
     /// <summary>Primary address; stable key for a discovered host. Set once at creation.</summary>
     public string Address { get; }
 
+    /// <summary>Numeric ordering key for <see cref="Address"/>: the IPv4 value, so the grid sorts 10.0.0.2 before
+    /// 10.0.0.10 (a string sort would not); anything that isn't a dotted quad (hostnames, IPv6) sorts last.</summary>
+    public long AddressSortKey { get; }
+
+    private string? _targetBlock;
+    /// <summary>The operator's target token this host came from (e.g. "192.168.0.0/24") — the results grid groups
+    /// rows by it. Null for rows from a scan file that predates block information.</summary>
+    public string? TargetBlock { get => _targetBlock; set => Set(ref _targetBlock, value); }
+
     public string? Name { get => _name; set { if (Set(ref _name, value)) Raise(nameof(DisplayName)); } }
     public string? Fqdn { get => _fqdn; set => Set(ref _fqdn, value); }
     public DeviceType DeviceType { get => _deviceType; set => Set(ref _deviceType, value); }
@@ -100,7 +109,21 @@ public sealed class Machine : ObservableBase
     public Machine(string address)
     {
         Address = address ?? throw new ArgumentNullException(nameof(address));
+        AddressSortKey = ComputeSortKey(address);
         IpAddresses.Add(address);
+    }
+
+    private static long ComputeSortKey(string address)
+    {
+        var parts = address.Split('.');
+        if (parts.Length != 4) return long.MaxValue;
+        long key = 0;
+        foreach (var part in parts)
+        {
+            if (!byte.TryParse(part, out var b)) return long.MaxValue;
+            key = (key << 8) | b;
+        }
+        return key;
     }
 
     /// <summary>Force a full re-read of this machine's row and detail after a background inventory pass. Must be

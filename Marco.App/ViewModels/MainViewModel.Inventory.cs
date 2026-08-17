@@ -158,7 +158,11 @@ public partial class MainViewModel
     // Mutating credentials mid-run could dispose a SecureString a connect is actively using.
     private bool CanMutateCredentials() => !IsScanning;
 
-    partial void OnIsScanningChanged(bool value) => RefreshScanCommands();
+    partial void OnIsScanningChanged(bool value)
+    {
+        RefreshScanCommands();
+        if (!value) FlushPendingUpdatePrompt();
+    }
 
     private IReadOnlyList<CredentialCandidate> ResolveCandidates()
     {
@@ -333,8 +337,13 @@ public partial class MainViewModel
             var doc = new JsonExporter().Load(dialog.FileName);
             Machines.Clear();
             SelectedMachine = null;
+            var ranges = doc.Metadata.RangesScanned ?? Array.Empty<string>();
             foreach (var machine in doc.ToMachines())
+            {
+                // Files from before per-row block information: place each host in the range that covers it.
+                machine.TargetBlock ??= Marco.Core.Targets.TargetParser.FindBlock(ranges, machine.Address) ?? "Other";
                 Machines.Add(machine);
+            }
 
             AliveCount = Machines.Count(m => m.IsAlive);
             UnreachableCount = Machines.Count - AliveCount;

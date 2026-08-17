@@ -24,7 +24,7 @@
         <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom">
           <TextBlock HorizontalAlignment="Right" FontSize="11" Margin="0,0,0,2"
                      Visibility="{Binding UpdateAvailable, Converter={StaticResource BoolToVis}}">
-            <Hyperlink Command="{Binding RestartToUpdateCommand}" Foreground="#FFE9A0">
+            <Hyperlink Command="{Binding UpdateActionCommand}" Foreground="#FFE9A0">
               <Run Text="{Binding UpdateText, Mode=OneWay}" />
             </Hyperlink>
           </TextBlock>
@@ -251,6 +251,8 @@
               <TextBox Width="220" Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}" />
               <TextBlock Text="filters every column" VerticalAlignment="Center" Margin="10,0,0,0"
                          Foreground="{StaticResource MutedBrush}" FontSize="11" />
+              <CheckBox Content="Group by IP block" IsChecked="{Binding GroupByBlock}" VerticalAlignment="Center"
+                        Margin="18,0,0,0" ToolTip="One collapsible section per CIDR / range you entered" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
               <Button Content="Inventory selected" Command="{Binding InventorySelectedCommand}" />
@@ -270,10 +272,43 @@
                   SelectedItem="{Binding SelectedMachine}"
                   AutoGenerateColumns="False" IsReadOnly="True"
                   EnableRowVirtualization="True" EnableColumnVirtualization="True"
+                  VirtualizingPanel.IsVirtualizingWhenGrouping="True"
                   CanUserReorderColumns="True" CanUserResizeColumns="True" CanUserSortColumns="True"
                   GridLinesVisibility="Horizontal" HeadersVisibility="Column"
                   RowHeight="24" SelectionMode="Single" Background="White"
                   RowBackground="White" AlternatingRowBackground="{StaticResource RowAltBrush}">
+          <!-- One collapsible section per target block (see MainViewModel.ApplyGrouping). -->
+          <DataGrid.GroupStyle>
+            <GroupStyle>
+              <GroupStyle.ContainerStyle>
+                <Style TargetType="{x:Type GroupItem}">
+                  <Setter Property="Template">
+                    <Setter.Value>
+                      <ControlTemplate TargetType="{x:Type GroupItem}">
+                        <Expander IsExpanded="True" Background="{StaticResource PanelBrush}"
+                                  BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+                          <Expander.Header>
+                            <StackPanel Orientation="Horizontal" Margin="2,2">
+                              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontFamily="Consolas" />
+                              <TextBlock Foreground="{StaticResource MutedBrush}" Margin="10,0,0,0">
+                                <TextBlock.Text>
+                                  <MultiBinding Converter="{StaticResource GroupSummary}">
+                                    <Binding Path="Items" />
+                                    <Binding Path="ItemCount" />
+                                  </MultiBinding>
+                                </TextBlock.Text>
+                              </TextBlock>
+                            </StackPanel>
+                          </Expander.Header>
+                          <ItemsPresenter />
+                        </Expander>
+                      </ControlTemplate>
+                    </Setter.Value>
+                  </Setter>
+                </Style>
+              </GroupStyle.ContainerStyle>
+            </GroupStyle>
+          </DataGrid.GroupStyle>
           <DataGrid.Columns>
             <DataGridTemplateColumn Header="" Width="26" CanUserSort="False">
               <DataGridTemplateColumn.CellTemplate>
@@ -284,7 +319,8 @@
                 </DataTemplate>
               </DataGridTemplateColumn.CellTemplate>
             </DataGridTemplateColumn>
-            <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="120" />
+            <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="120"
+                                SortMemberPath="AddressSortKey" SortDirection="Ascending" />
             <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="140" />
             <DataGridTextColumn Header="Type" Binding="{Binding DeviceType}" Width="100" />
             <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90" />

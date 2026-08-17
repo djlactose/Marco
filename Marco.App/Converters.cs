@@ -52,6 +52,30 @@ public sealed class BoolToVisibilityConverter : IValueConverter
         => value is Visibility.Visible;
 }
 
+/// <summary>Group-header summary for the results grid: "254 hosts · 30 alive". Bound as a MultiBinding on the
+/// group's Items and ItemCount — ItemCount changes as rows arrive, which is what triggers the recount.</summary>
+public sealed class GroupSummaryConverter : IMultiValueConverter
+{
+    public object Convert(object[] values, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var items = values.Length > 0 ? values[0] as System.Collections.IEnumerable : null;
+        int total = 0, alive = 0;
+        if (items is not null)
+        {
+            foreach (var item in items)
+            {
+                total++;
+                if (item is Machine { IsAlive: true }) alive++;
+            }
+        }
+        var hosts = total == 1 ? "1 host" : $"{total:N0} hosts";
+        return $"{hosts} · {alive:N0} alive";
+    }
+
+    public object[] ConvertBack(object value, Type[] targetTypes, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>Non-empty/non-null → Visible, else Collapsed.</summary>
 public sealed class NotEmptyToVisibilityConverter : IValueConverter
 {

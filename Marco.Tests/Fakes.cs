@@ -103,10 +103,12 @@ internal sealed class FakeUpdateSource : IUpdateSource
     public Task<string?> GetChecksumAsync(ReleaseInfo release, CancellationToken ct)
         => Task.FromResult<string?>(PayloadSha256);
 
-    public Task DownloadExeAsync(ReleaseInfo release, string destinationPath, CancellationToken ct)
+    public Task DownloadExeAsync(ReleaseInfo release, string destinationPath, IProgress<long>? bytesReceived, CancellationToken ct)
     {
         Interlocked.Increment(ref Downloads);
         File.WriteAllBytes(destinationPath, Payload);
+        bytesReceived?.Report(Payload.Length / 2);
+        bytesReceived?.Report(Payload.Length);
         return Task.CompletedTask;
     }
 }

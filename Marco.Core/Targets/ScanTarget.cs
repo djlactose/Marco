@@ -1,8 +1,10 @@
 namespace Marco.Core.Targets;
 
 /// <summary>A single address to probe. <see cref="IsHostname"/> is true when the token could not be
-/// parsed as an IP literal and must be resolved before scanning.</summary>
-public sealed record ScanTarget(string Address, bool IsHostname)
+/// parsed as an IP literal and must be resolved before scanning. <see cref="Block"/> is the operator's token this
+/// address expanded from (a CIDR or range), or <see cref="TargetParser.IndividualHostsBlock"/> for single IPs and
+/// hostnames — the results grid groups rows by it.</summary>
+public sealed record ScanTarget(string Address, bool IsHostname, string? Block = null)
 {
     public override string ToString() => Address;
 }

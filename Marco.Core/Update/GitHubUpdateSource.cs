@@ -47,7 +47,7 @@ public sealed class GitHubUpdateSource : IUpdateSource, IDisposable
         return Sha256File.ParseChecksumText(text);
     }
 
-    public async Task DownloadExeAsync(ReleaseInfo release, string destinationPath, CancellationToken ct)
+    public async Task DownloadExeAsync(ReleaseInfo release, string destinationPath, IProgress<long>? bytesReceived, CancellationToken ct)
     {
         using var response = await _http
             .GetAsync(release.ExeDownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct)
@@ -56,7 +56,16 @@ public sealed class GitHubUpdateSource : IUpdateSource, IDisposable
 
         await using var body = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
         await using var file = File.Create(destinationPath);
-        await body.CopyToAsync(file, ct).ConfigureAwait(false);
+
+        var buffer = new byte[256 * 1024];
+        long total = 0;
+        int read;
+        while ((read = await body.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+        {
+            await file.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+            total += read;
+            bytesReceived?.Report(total);
+        }
     }
 
     public void Dispose() => _http.Dispose();

@@ -164,4 +164,29 @@ public class TargetParserTests
         Assert.Equal(254 + 5 + 1, est);
         Assert.Equal(est, actual);
     }
+
+    [Fact]
+    public void ExpandedTargets_CarryTheirBlock()
+    {
+        var targets = TargetParser.Parse(new[] { "192.168.1.0/30\n192.168.0.0/24\n10.0.0.5-6\n172.16.0.9\nserver01" }).ToList();
+
+        Assert.All(targets.Where(t => t.Address.StartsWith("192.168.1.")), t => Assert.Equal("192.168.1.0/30", t.Block));
+        Assert.All(targets.Where(t => t.Address.StartsWith("192.168.0.")), t => Assert.Equal("192.168.0.0/24", t.Block));
+        Assert.All(targets.Where(t => t.Address.StartsWith("10.0.0.")), t => Assert.Equal("10.0.0.5-6", t.Block));
+        Assert.Equal(TargetParser.IndividualHostsBlock, targets.Single(t => t.Address == "172.16.0.9").Block);
+        Assert.Equal(TargetParser.IndividualHostsBlock, targets.Single(t => t.Address == "server01").Block);
+    }
+
+    [Theory]
+    [InlineData("192.168.0.77", "192.168.0.0/24")]
+    [InlineData("192.168.1.2", "192.168.1.0/30")]
+    [InlineData("10.0.0.6", "10.0.0.5-6")]
+    [InlineData("172.16.0.9", TargetParser.IndividualHostsBlock)]
+    [InlineData("server01", TargetParser.IndividualHostsBlock)]
+    [InlineData("8.8.8.8", null)]
+    public void FindBlock_LocatesTheCoveringToken(string address, string? expected)
+    {
+        var tokens = new[] { "192.168.1.0/30", "192.168.0.0/24", "10.0.0.5-6", "172.16.0.9", "server01", "not/a/cidr" };
+        Assert.Equal(expected, TargetParser.FindBlock(tokens, address));
+    }
 }

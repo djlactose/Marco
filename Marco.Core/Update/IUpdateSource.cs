@@ -11,6 +11,7 @@ public interface IUpdateSource
     /// <summary>The release's published SHA-256 (lowercase hex), or null when unreadable.</summary>
     Task<string?> GetChecksumAsync(ReleaseInfo release, CancellationToken ct);
 
-    /// <summary>Streams the release exe to <paramref name="destinationPath"/> (never buffered in memory).</summary>
-    Task DownloadExeAsync(ReleaseInfo release, string destinationPath, CancellationToken ct);
+    /// <summary>Streams the release exe to <paramref name="destinationPath"/> (never buffered in memory), reporting
+    /// cumulative bytes received to <paramref name="bytesReceived"/> when supplied.</summary>
+    Task DownloadExeAsync(ReleaseInfo release, string destinationPath, IProgress<long>? bytesReceived, CancellationToken ct);
 }

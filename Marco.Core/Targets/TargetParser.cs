@@ -12,6 +12,10 @@ namespace Marco.Core.Targets;
 /// </summary>
 public static class TargetParser
 {
+    /// <summary>The block name given to targets that came from a single IP or hostname token, so a list of
+    /// individual hosts groups together instead of producing one group per host.</summary>
+    public const string IndividualHostsBlock = "Individual hosts";
+
     /// <summary>Split raw input (which may be multi-line, from a text box or host file) into tokens,
     /// dropping blank lines and <c>#</c> comments.</summary>
     public static IEnumerable<string> Tokenize(IEnumerable<string> inputs)
@@ -63,6 +67,41 @@ public static class TargetParser
             throw new TargetTooLargeException(total, options.LargeExpansionThreshold);
 
         return ExpandDeduped(tokens, options);
+    }
+
+    /// <summary>The block (see <see cref="ScanTarget.Block"/>) that <paramref name="address"/> belongs to among
+    /// <paramref name="tokens"/>: the first CIDR/range containing it, <see cref="IndividualHostsBlock"/> when it
+    /// matches a single IP or hostname token, or null when no token covers it. Used to re-group a scan reloaded
+    /// from a file that predates per-row block information. Malformed tokens are skipped.</summary>
+    public static string? FindBlock(IEnumerable<string> tokens, string address)
+    {
+        bool isIp = TryParseIpv4(address, out uint addr);
+        foreach (var token in tokens)
+        {
+            try
+            {
+                switch (Classify(token))
+                {
+                    case Kind.Cidr:
+                        if (!isIp) break;
+                        var (network, prefix) = ParseCidr(token);
+                        uint mask = prefix == 0 ? 0u : uint.MaxValue << (32 - prefix);
+                        if ((addr & mask) == network) return token;
+                        break;
+                    case Kind.Range:
+                        if (!isIp) break;
+                        var (start, end) = ParseRange(token);
+                        if (addr >= start && addr <= end) return token;
+                        break;
+                    default:
+                        if (string.Equals(token, address, StringComparison.OrdinalIgnoreCase)) return IndividualHostsBlock;
+                        if (IPAddress.TryParse(token, out var ip) && ip.ToString() == address) return IndividualHostsBlock;
+                        break;
+                }
+            }
+            catch (TargetParseException) { /* skip malformed token */ }
+        }
+        return null;
     }
 
     private static IEnumerable<ScanTarget> ExpandDeduped(List<string> tokens, TargetExpansionOptions options)
@@ -152,7 +191,7 @@ public static class TargetParser
         var (first, last) = CidrUsableRange(token, options);
         for (uint a = first; ; a++)
         {
-            yield return new ScanTarget(Ipv4ToString(a), false);
+            yield return new ScanTarget(Ipv4ToString(a), false, token);
             if (a == last) break; // guard against uint overflow at 255.255.255.255
         }
     }
@@ -198,7 +237,7 @@ public static class TargetParser
         var (start, end) = ParseRange(token);
         for (uint a = start; ; a++)
         {
-            yield return new ScanTarget(Ipv4ToString(a), false);
+            yield return new ScanTarget(Ipv4ToString(a), false, token);
             if (a == end) break;
         }
     }
@@ -208,9 +247,9 @@ public static class TargetParser
     private static IEnumerable<ScanTarget> ExpandSingle(string token)
     {
         if (IPAddress.TryParse(token, out var ip))
-            yield return new ScanTarget(ip.ToString(), false);
+            yield return new ScanTarget(ip.ToString(), false, IndividualHostsBlock);
         else
-            yield return new ScanTarget(token, true);
+            yield return new ScanTarget(token, true, IndividualHostsBlock);
     }
 
     // --- IPv4 helpers ---------------------------------------------------------

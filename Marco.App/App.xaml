@@ -9,6 +9,7 @@
       <local:BytesToGbConverter x:Key="BytesToGb" />
       <local:BoolToVisibilityConverter x:Key="BoolToVis" />
       <local:NotEmptyToVisibilityConverter x:Key="NotEmptyToVis" />
+      <local:GroupSummaryConverter x:Key="GroupSummary" />
 
       <!-- Neutral, theme-agnostic palette so the tool reads as one surface. -->
       <SolidColorBrush x:Key="PanelBrush" Color="#F5F6F8" />

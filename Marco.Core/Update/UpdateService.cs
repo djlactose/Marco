@@ -5,9 +5,13 @@ using Marco.Core.Storage;
 
 namespace Marco.Core.Update;
 
-/// <summary><see cref="Deferred"/>: another Marco window is downloading/staging this same release right now; the
-/// caller should simply check again later rather than treat it as a failure.</summary>
-public enum UpdateState { Unknown, UpToDate, Staged, NotifyOnly, Failed, Deferred }
+/// <summary>
+/// <see cref="Available"/>: a newer release exists but has not been downloaded — the operator is asked first.
+/// <see cref="Staged"/>: downloaded and verified, ready to swap in. <see cref="NotifyOnly"/>: newer, but this
+/// install can't swap itself (exe folder not writable). <see cref="Deferred"/>: another Marco window is
+/// downloading this same release right now; check again later rather than treat it as a failure.
+/// </summary>
+public enum UpdateState { Unknown, UpToDate, Available, Staged, NotifyOnly, Failed, Deferred }
 
 public sealed record UpdateCheckResult(UpdateState State, ReleaseInfo? Release, string? StagedExePath);
 
@@ -202,7 +206,11 @@ public sealed class UpdateService
 
     // --- Background check / stage -------------------------------------------------------------------------------
 
-    public async Task<UpdateCheckResult> CheckAndStageAsync(CancellationToken ct = default)
+    /// <summary>Check only — never downloads. Returns <see cref="UpdateState.Available"/> for a newer release the
+    /// operator hasn't been asked about, <see cref="UpdateState.Staged"/> when that release is already downloaded and
+    /// verified (e.g. by a previous session or another window), <see cref="UpdateState.NotifyOnly"/> when this
+    /// install can't swap itself, else UpToDate/Failed.</summary>
+    public async Task<UpdateCheckResult> CheckAsync(CancellationToken ct = default)
     {
         try
         {
@@ -231,16 +239,39 @@ public sealed class UpdateService
 
             _log("available", release.TagName);
 
-            // An unwritable exe directory (e.g. Program Files fallback mode) can never be swapped — don't spend
-            // a 100+ MB download on it; just point the operator at the release page.
+            // An unwritable exe directory (e.g. Program Files fallback mode) can never be swapped — don't offer a
+            // 100+ MB download for it; just point the operator at the release page.
             if (!ExeDirectoryWritable)
             {
                 _log("notify_only", release.TagName);
                 return new UpdateCheckResult(UpdateState.NotifyOnly, release, null);
             }
 
-            var fileName = $"Marco-{release.Version}.exe";
-            var stagedPath = Path.Combine(UpdatesDirectory, fileName);
+            var stagedPath = StagedPathFor(release);
+            var existing = ReadStagedManifest();
+            if (existing is not null && existing.FileName == Path.GetFileName(stagedPath) && Sha256File.Verify(stagedPath, existing.Sha256))
+            {
+                _log("staged", $"already staged {release.TagName}");
+                return new UpdateCheckResult(UpdateState.Staged, release, stagedPath);
+            }
+
+            return new UpdateCheckResult(UpdateState.Available, release, null);
+        }
+        catch (Exception ex)
+        {
+            _log("check_failed", $"{ex.GetType().Name}: {ex.Message}");
+            return new UpdateCheckResult(UpdateState.Failed, null, null);
+        }
+    }
+
+    /// <summary>Download, verify and stage <paramref name="release"/> (the operator said yes). <paramref name="progress"/>
+    /// receives the download fraction 0..1. Returns Staged, Deferred (another window is downloading it), or Failed.</summary>
+    public async Task<UpdateCheckResult> StageAsync(ReleaseInfo release, IProgress<double>? progress = null, CancellationToken ct = default)
+    {
+        try
+        {
+            var stagedPath = StagedPathFor(release);
+            var fileName = Path.GetFileName(stagedPath);
 
             // Several Marco windows share one updates directory. Only one of them should download a given release;
             // the others defer and pick up the staged file on their next check. A lock *file* (not a Mutex or
@@ -258,6 +289,7 @@ public sealed class UpdateService
             if (existing is not null && existing.FileName == fileName && Sha256File.Verify(stagedPath, existing.Sha256))
             {
                 _log("staged", $"already staged {release.TagName}");
+                progress?.Report(1);
                 return new UpdateCheckResult(UpdateState.Staged, release, stagedPath);
             }
 
@@ -273,12 +305,15 @@ public sealed class UpdateService
                 return new UpdateCheckResult(UpdateState.Failed, release, null);
             }
 
+            _log("download_started", release.TagName);
             var partial = $"{stagedPath}.{Environment.ProcessId}.partial";
             TryDelete(partial);
             using (var dlCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
             {
                 dlCts.CancelAfter(TimeSpan.FromMinutes(15));
-                await _source.DownloadExeAsync(release, partial, dlCts.Token).ConfigureAwait(false);
+                IProgress<long>? bytes = progress is null ? null : new Progress<long>(received =>
+                    progress.Report(release.ExeSizeBytes > 0 ? Math.Clamp((double)received / release.ExeSizeBytes, 0, 1) : 0));
+                await _source.DownloadExeAsync(release, partial, bytes, dlCts.Token).ConfigureAwait(false);
             }
 
             if (!Sha256File.Verify(partial, expected))
@@ -292,14 +327,27 @@ public sealed class UpdateService
             WriteStagedManifest(new StagedManifest(
                 release.Version.ToString(), fileName, expected, DateTime.UtcNow, release.Body, release.HtmlUrl));
             _log("staged", release.TagName);
+            progress?.Report(1);
             return new UpdateCheckResult(UpdateState.Staged, release, stagedPath);
         }
         catch (Exception ex)
         {
             _log("check_failed", $"{ex.GetType().Name}: {ex.Message}");
-            return new UpdateCheckResult(UpdateState.Failed, null, null);
+            return new UpdateCheckResult(UpdateState.Failed, release, null);
         }
     }
+
+    /// <summary>Check and, when a newer release is available, stage it straight away — the unattended path
+    /// (no operator to ask). The interactive app uses <see cref="CheckAsync"/> and asks before <see cref="StageAsync"/>.</summary>
+    public async Task<UpdateCheckResult> CheckAndStageAsync(CancellationToken ct = default)
+    {
+        var check = await CheckAsync(ct).ConfigureAwait(false);
+        return check.State == UpdateState.Available && check.Release is not null
+            ? await StageAsync(check.Release, null, ct).ConfigureAwait(false)
+            : check;
+    }
+
+    private string StagedPathFor(ReleaseInfo release) => Path.Combine(UpdatesDirectory, $"Marco-{release.Version}.exe");
 
     /// <summary>The operator clicked "restart to apply". Returns true when the relaunch was started. Serialised
     /// with the other windows' startup swap/rollback through the update gate.</summary>

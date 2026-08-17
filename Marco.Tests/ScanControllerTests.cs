@@ -198,6 +198,24 @@ public class ScanControllerTests
         Assert.Equal(0, last.InFlight);
     }
 
+    [Fact]
+    public async Task EmittedRows_CarryTheTargetBlock()
+    {
+        var liveness = new FakeLivenessProbe();
+        liveness.Alive.Add("10.0.0.1");
+        liveness.ThrowFor.Add("10.0.0.3");
+
+        var emitted = new ConcurrentBag<Machine>();
+        await Build(liveness).RunDiscoveryAsync(
+            new[] { new ScanTarget("10.0.0.1", false, "10.0.0.0/24"),
+                    new ScanTarget("10.0.0.2", false, "10.0.0.0/24"),
+                    new ScanTarget("10.0.0.3", false, "10.0.0.0/24") },
+            FastSettings(), 3, includeUnreachable: true, m => emitted.Add(m), null, null, default);
+
+        Assert.Equal(3, emitted.Count);
+        Assert.All(emitted, m => Assert.Equal("10.0.0.0/24", m.TargetBlock)); // alive, unreachable and errored rows alike
+    }
+
     // --- In-flight tracking, pause semantics, cancel settling ------------------------------------------------
 
     /// <summary>A probe gate per address: hosts sit "in flight" until the test releases them.</summary>

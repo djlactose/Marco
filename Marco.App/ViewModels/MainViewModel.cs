@@ -66,9 +66,12 @@ public partial class MainViewModel : ObservableObject
     /// <summary>When set, automatically inventory the alive hosts as soon as discovery finishes.</summary>
     [ObservableProperty] private bool _autoInventory;
 
-    // --- Filter / selection ---
+    // --- Filter / selection / layout ---
     [ObservableProperty] private string _filterText = "";
     [ObservableProperty] private Machine? _selectedMachine;
+
+    /// <summary>One collapsible section per target block (CIDR / range) in the results grid.</summary>
+    [ObservableProperty] private bool _groupByBlock = true;
 
     // --- Run state ---
     [ObservableProperty] private bool _isScanning;
@@ -118,6 +121,11 @@ public partial class MainViewModel : ObservableObject
 
         MachinesView = CollectionViewSource.GetDefaultView(Machines);
         MachinesView.Filter = FilterMachine;
+        // Numeric address order by default (10.0.0.2 before 10.0.0.10) — the Address column header re-sorts on the
+        // same key. With grouping on, groups fall into the same order because each group is placed where its
+        // lowest address sorts.
+        MachinesView.SortDescriptions.Add(new SortDescription(nameof(Machine.AddressSortKey), ListSortDirection.Ascending));
+        ApplyGrouping();
 
         _flushTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
@@ -141,6 +149,7 @@ public partial class MainViewModel : ObservableObject
         _resolveMac = s.ResolveMac;
         _includeUnreachable = s.IncludeUnreachable;
         _autoInventory = s.AutoInventory;
+        _groupByBlock = s.GroupByBlock;
         _includeBetaSetting = s.IncludeBetaUpdates;
         _includeBetaUpdates = s.IncludeBetaUpdates ?? Marco.Core.AppVersion.IsBeta;
     }
@@ -159,9 +168,22 @@ public partial class MainViewModel : ObservableObject
         ResolveMac = ResolveMac,
         IncludeUnreachable = IncludeUnreachable,
         AutoInventory = AutoInventory,
+        GroupByBlock = GroupByBlock,
     });
 
     partial void OnFilterTextChanged(string value) => MachinesView.Refresh();
+
+    partial void OnGroupByBlockChanged(bool value) => ApplyGrouping();
+
+    private void ApplyGrouping()
+    {
+        using (MachinesView.DeferRefresh())
+        {
+            MachinesView.GroupDescriptions.Clear();
+            if (GroupByBlock)
+                MachinesView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(Machine.TargetBlock)));
+        }
+    }
 
     private bool FilterMachine(object obj)
     {

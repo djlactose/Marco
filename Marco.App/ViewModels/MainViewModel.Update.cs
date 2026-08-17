@@ -15,6 +15,8 @@ public partial class MainViewModel
     private DispatcherTimer? _updateTimer;
     private DispatcherTimer? _deferredRecheckTimer;
     private UpdateCheckResult? _lastUpdateResult;
+    private UpdateCheckResult? _pendingUpdatePrompt; // found while a run was active; asked when it finishes
+    private string? _promptedVersion;                // background checks ask once per version per session
     private string? _whatsNewUrl;
     private int _updateCheckInFlight;
 
@@ -59,14 +61,20 @@ public partial class MainViewModel
             if (initialDelay is { } delay) await Task.Delay(delay);
             if (manual) UpdateCheckStatus = "Checking…";
 
-            var result = await Task.Run(() => _updater.CheckAndStageAsync());
+            // Check only — nothing is downloaded until the operator says yes in the prompt below.
+            var result = await Task.Run(() => _updater.CheckAsync());
             _lastUpdateResult = result;
 
             // Continuations resume on the UI thread (dispatcher context), so property sets are safe here.
             switch (result.State)
             {
+                case UpdateState.Available:
+                    UpdateText = $"Update {result.Release!.TagName} available — download and install";
+                    UpdateAvailable = true;
+                    if (manual) UpdateCheckStatus = "";
+                    break;
                 case UpdateState.Staged:
-                    UpdateText = $"Update {result.Release!.TagName} ready — restart to apply";
+                    UpdateText = $"Update {result.Release!.TagName} downloaded — restart to install";
                     UpdateAvailable = true;
                     if (manual) UpdateCheckStatus = "";
                     break;
@@ -78,19 +86,143 @@ public partial class MainViewModel
                 case UpdateState.UpToDate:
                     if (manual) UpdateCheckStatus = "Up to date.";
                     break;
-                case UpdateState.Deferred:
-                    // Another Marco window is downloading this release; it will be staged for us shortly.
-                    if (manual) UpdateCheckStatus = "Another Marco window is downloading this update.";
-                    ScheduleDeferredRecheck();
-                    break;
                 default:
                     if (manual) UpdateCheckStatus = "Check failed (see the run log).";
                     break;
             }
         }
+        catch (Exception ex)
+        {
+            // Fire-and-forget caller: never let an update-check problem surface as an unobserved task exception.
+            _runLog.Note($"Update check failed: {ex.GetType().Name}: {ex.Message}");
+            if (manual) UpdateCheckStatus = "Check failed (see the run log).";
+            return;
+        }
         finally
         {
             Interlocked.Exchange(ref _updateCheckInFlight, 0);
+        }
+
+        try
+        {
+            if (_lastUpdateResult?.State is UpdateState.Available or UpdateState.Staged or UpdateState.NotifyOnly)
+                OfferUpdate(_lastUpdateResult, manual);
+        }
+        catch (Exception ex)
+        {
+            _runLog.Note($"Update prompt failed: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// A found update is offered in a dialog, not just the header link (which is easy to miss). Background checks
+    /// ask once per version per session; a manual "Check now" always asks. If a scan or inventory is running the
+    /// prompt waits until it finishes rather than interrupting the operator mid-run.
+    /// </summary>
+    private void OfferUpdate(UpdateCheckResult result, bool manual)
+    {
+        var version = result.Release?.TagName ?? "";
+        if (!manual && string.Equals(_promptedVersion, version, StringComparison.OrdinalIgnoreCase)) return;
+        _promptedVersion = version;
+
+        if (IsScanning) { _pendingUpdatePrompt = result; return; }
+        _pendingUpdatePrompt = null;
+        ShowUpdatePrompt(result);
+    }
+
+    /// <summary>Called when a run ends: show the prompt that was held back while scanning.</summary>
+    private void FlushPendingUpdatePrompt()
+    {
+        if (IsScanning || _pendingUpdatePrompt is null) return;
+        var pending = _pendingUpdatePrompt;
+        _pendingUpdatePrompt = null;
+        // Let the run's own final status land first, then ask.
+        Application.Current?.Dispatcher.BeginInvoke(new Action(() => ShowUpdatePrompt(pending)), DispatcherPriority.Background);
+    }
+
+    private void ShowUpdatePrompt(UpdateCheckResult result)
+    {
+        if (_updater is null || result.Release is null) return;
+        var owner = Application.Current?.MainWindow;
+        var tag = result.Release.TagName;
+        var have = $"v{AppVersion.Display}";
+
+        switch (result.State)
+        {
+            case UpdateState.Available:
+            {
+                var mb = result.Release.ExeSizeBytes / 1024d / 1024d;
+                var sizeMb = mb >= 1 ? $" ({mb:0} MB)" : "";
+                var answer = ShowYesNo(owner,
+                    $"A new version of Marco is available: {tag} (you have {have}).\n\n" +
+                    $"Download and install it now{sizeMb}? Marco will restart to apply the update.",
+                    "Update available");
+                if (answer == MessageBoxResult.Yes) _ = DownloadAndInstallAsync(result.Release);
+                break;
+            }
+            case UpdateState.Staged:
+            {
+                var answer = ShowYesNo(owner,
+                    $"Marco {tag} has been downloaded and verified (you have {have}).\n\nRestart Marco now to install it?",
+                    "Update ready");
+                if (answer == MessageBoxResult.Yes) ApplyStagedAndRestart();
+                break;
+            }
+            case UpdateState.NotifyOnly:
+            {
+                var answer = ShowYesNo(owner,
+                    $"A new version of Marco is available: {tag} (you have {have}).\n\n" +
+                    "Marco can't update itself from this location because its folder isn't writable. Open the release page to download it?",
+                    "Update available");
+                if (answer == MessageBoxResult.Yes) OpenUrl(result.Release.HtmlUrl);
+                break;
+            }
+        }
+    }
+
+    private static MessageBoxResult ShowYesNo(Window? owner, string text, string caption)
+        => owner is not null
+            ? MessageBox.Show(owner, text, caption, MessageBoxButton.YesNo, MessageBoxImage.Information)
+            : MessageBox.Show(text, caption, MessageBoxButton.YesNo, MessageBoxImage.Information);
+
+    /// <summary>The operator said yes: download with progress in the header, verify, swap, restart.</summary>
+    private async Task DownloadAndInstallAsync(ReleaseInfo release)
+    {
+        if (_updater is null) return;
+        if (Interlocked.Exchange(ref _updateCheckInFlight, 1) == 1) return; // a check/download is already running
+
+        UpdateCheckResult staged;
+        try
+        {
+            UpdateAvailable = true;
+            UpdateText = $"Downloading update {release.TagName}… 0%";
+            var progress = new Progress<double>(f => UpdateText = $"Downloading update {release.TagName}… {f * 100:0}%");
+            staged = await Task.Run(() => _updater.StageAsync(release, progress));
+            _lastUpdateResult = staged;
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _updateCheckInFlight, 0);
+        }
+
+        switch (staged.State)
+        {
+            case UpdateState.Staged:
+                UpdateText = $"Update {release.TagName} downloaded — restart to install";
+                ApplyStagedAndRestart();
+                break;
+            case UpdateState.Deferred:
+                UpdateText = $"Update {release.TagName} — another Marco window is downloading it";
+                ScheduleDeferredRecheck();
+                break;
+            default:
+                // Download or verification failed (details in the run log) — degrade to the release page.
+                UpdateText = $"Update {release.TagName} download failed — view release";
+                _lastUpdateResult = new UpdateCheckResult(UpdateState.NotifyOnly, release, null);
+                MessageBox.Show(
+                    $"The update could not be downloaded or verified. See the run log for details.\n\nYou can download {release.TagName} manually from the release page.",
+                    "Update failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                break;
         }
     }
 
@@ -112,16 +244,32 @@ public partial class MainViewModel
     [RelayCommand]
     private Task CheckForUpdatesNowAsync() => RunUpdateCheckAsync(null, manual: true);
 
+    /// <summary>The header link: does whatever the update's current state calls for — start the download, restart
+    /// into a downloaded update, or open the release page.</summary>
     [RelayCommand]
-    private void RestartToUpdate()
+    private void UpdateAction()
+    {
+        if (_updater is null || _lastUpdateResult is null) return;
+        switch (_lastUpdateResult.State)
+        {
+            case UpdateState.Available when _lastUpdateResult.Release is { } release:
+                _ = DownloadAndInstallAsync(release);
+                break;
+            case UpdateState.Staged:
+                ApplyStagedAndRestart();
+                break;
+            case UpdateState.NotifyOnly:
+                OpenUrl(_lastUpdateResult.Release?.HtmlUrl);
+                break;
+            case UpdateState.Deferred:
+                _ = RunUpdateCheckAsync(null, manual: true);
+                break;
+        }
+    }
+
+    private void ApplyStagedAndRestart()
     {
         if (_updater is null) return;
-
-        if (_lastUpdateResult?.State == UpdateState.NotifyOnly)
-        {
-            OpenUrl(_lastUpdateResult.Release?.HtmlUrl);
-            return;
-        }
 
         SaveSettings();
         if (_updater.TryApplyAndRestartNow())

@@ -101,6 +101,42 @@ public class UpdateServiceTests
     }
 
     [Fact]
+    public async Task Check_ReportsAvailable_WithoutDownloading()
+    {
+        using var h = new Harness();
+
+        var result = await h.Service.CheckAsync();
+
+        Assert.Equal(UpdateState.Available, result.State);
+        Assert.Equal("v9.9.9", result.Release!.TagName);
+        Assert.Equal(0, h.Source.Downloads);
+        Assert.Null(h.Service.ReadStagedManifest());
+        Assert.False(File.Exists(h.StageLockPath)); // the check never takes the stage lock
+    }
+
+    [Fact]
+    public async Task Stage_AfterCheck_ReportsProgressAndStages()
+    {
+        using var h = new Harness();
+        var check = await h.Service.CheckAsync();
+        var fractions = new List<double>();
+        var progress = new SyncProgress<double> { OnReport = fractions.Add };
+
+        var staged = await h.Service.StageAsync(check.Release!, progress);
+
+        Assert.Equal(UpdateState.Staged, staged.State);
+        Assert.Equal(1, h.Source.Downloads);
+        Assert.NotEmpty(fractions);
+        Assert.Equal(1d, fractions[^1]);
+        Assert.All(fractions, f => Assert.InRange(f, 0d, 1d));
+        Assert.True(h.Logged("download_started"));
+
+        // A later check sees it as already staged (e.g. next session's prompt says "restart to install").
+        Assert.Equal(UpdateState.Staged, (await h.Service.CheckAsync()).State);
+        Assert.Equal(1, h.Source.Downloads);
+    }
+
+    [Fact]
     public async Task CheckAndStage_UpToDate_NeverTouchesTheLockOrDownloads()
     {
         using var h = new Harness();

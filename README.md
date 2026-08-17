@@ -80,9 +80,12 @@ runtime extraction) instead of the single self-extracting exe.
 1. **Targets** — enter CIDR (`10.0.0.0/24`), ranges (`10.0.0.1-50`), single IPs, or hostnames (one per line, or
    comma/space-separated on a line), or load a host file. Several networks can go in one scan. Expansions over
    65,536 addresses ask for confirmation.
-2. **Discovery** — click **Start**. The grid fills as hosts respond. **Pause** parks new hosts (hosts already
-   mid-probe finish — the status shows how many are still "in flight"); **Cancel** stops within about a second and
-   the status reads "Cancelling…" until the last in-flight probes have drained. Both also work during inventory.
+2. **Discovery** — click **Start**. The grid fills as hosts respond, in numeric address order (the **Address**
+   column sorts numerically, so 10.0.0.2 comes before 10.0.0.10), with one collapsible section per IP block you
+   entered (each CIDR/range; single IPs and hostnames share an "Individual hosts" section) — untick **Group by IP
+   block** for a flat list. **Pause** parks new hosts (hosts already mid-probe finish — the status shows how many
+   are still "in flight"); **Cancel** stops within about a second and the status reads "Cancelling…" until the last
+   in-flight probes have drained. Both also work during inventory.
 3. **Credentials** — add one or more credential sets (left panel). They are tried in order per host; the first
    that authenticates is remembered for that host. With none configured, Marco uses your current session token.
 4. **Inventory** — select a host and **Inventory selected**, or **Inventory alive** for all live Windows hosts.
@@ -143,14 +146,17 @@ Releases are built by GitHub Actions from two branches:
 Each release carries `Marco.exe`, its `Marco.exe.sha256`, and a **build provenance attestation** — anyone can
 verify an exe traces to this repository's CI with `gh attestation verify Marco.exe --repo djlactose/Marco`.
 
-**Auto-update.** On launch (and every 12 hours) Marco silently checks GitHub Releases, downloads a newer exe in
-the background, verifies its SHA-256 against the published checksum, and stages it. A header link offers
-"restart to apply"; otherwise the staged update is applied automatically at the next launch. Updates are never
-applied mid-session without a click, a failed update rolls back automatically (crash-loop sentinel + the kept
-`.old` exe), and every step is recorded in the run log. The **Include beta (pre-release) updates** checkbox
-(left panel, "About & updates") selects the channel; by default a beta build follows betas and a stable build
-follows stable. Set the environment variable **`MARCO_NO_UPDATE=1`** to disable the updater entirely (e.g. via
-GPO/SCCM for managed fleets).
+**Auto-update.** On launch (and every 12 hours) Marco checks GitHub Releases. When a newer version exists it
+**asks** — a dialog names the version and offers to download and install it now (if a scan is running, the
+question waits until it finishes). *Yes* downloads the exe with progress in the header, verifies its SHA-256
+against the published checksum, swaps it in and restarts Marco. *No* leaves a header link ("Update vX available
+— download and install") for later and asks again at the next launch; a background check never asks twice for the
+same version in one session, while **Check for updates now** always does. Nothing is downloaded until you say
+yes; a download that completed but wasn't applied (Marco was closed first) is applied automatically at the next
+launch. A failed update rolls back automatically (crash-loop sentinel + the kept `.old` exe), and every step is
+recorded in the run log. The **Include beta (pre-release) updates** checkbox (left panel, "About & updates")
+selects the channel; by default a beta build follows betas and a stable build follows stable. Set the environment
+variable **`MARCO_NO_UPDATE=1`** to disable the updater entirely (e.g. via GPO/SCCM for managed fleets).
 
 With several Marco windows open, the steps that touch the exe (apply at startup, rollback, "restart to apply")
 are serialised across windows through a short-lived gate, and only one window downloads a given release (the

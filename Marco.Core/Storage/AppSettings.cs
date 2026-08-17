@@ -19,4 +19,7 @@ public sealed record AppSettings
     public bool ResolveMac { get; init; } = true;
     public bool IncludeUnreachable { get; init; }
     public bool AutoInventory { get; init; }
+
+    /// <summary>Group the results grid into one collapsible section per target block (CIDR/range).</summary>
+    public bool GroupByBlock { get; init; } = true;
 }

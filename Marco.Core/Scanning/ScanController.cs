@@ -98,6 +98,7 @@ public sealed class ScanController
                         {
                             var dead = new Machine(target.Address)
                             {
+                                TargetBlock = target.Block,
                                 IsAlive = false,
                                 Status = MachineStatus.Unreachable,
                                 StatusDetail = "No response to ICMP or TCP probes.",
@@ -138,6 +139,7 @@ public sealed class ScanController
                     // Backstop: never let a host throw into the loop; surface it as an errored row.
                     emit = new Machine(target.Address)
                     {
+                        TargetBlock = target.Block,
                         Status = MachineStatus.Error,
                         StatusDetail = ex.Message,
                         LastScanned = DateTime.Now,
@@ -179,6 +181,7 @@ public sealed class ScanController
     {
         var m = new Machine(target.Address)
         {
+            TargetBlock = target.Block,
             IsAlive = true,
             DiscoveryMethod = liveness.Method,
             IcmpTtl = liveness.IcmpTtl,

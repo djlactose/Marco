@@ -50,7 +50,8 @@ public sealed record MachineDto(
     IReadOnlyList<VolumeInfo> Volumes,
     IReadOnlyList<AdapterDto> Adapters,
     IReadOnlyList<SoftwareEntry> Software,
-    IReadOnlyList<CollectorResultDto> Collectors)
+    IReadOnlyList<CollectorResultDto> Collectors,
+    string? TargetBlock = null)
 {
     public static MachineDto From(Machine m) => new(
         m.Address, m.Name, m.Fqdn, m.DeviceType, m.IsVirtual, m.Vendor,
@@ -60,14 +61,15 @@ public sealed record MachineDto(
         m.TotalMemoryBytes, m.MemorySlotsUsed, m.MemorySlotsTotal,
         m.Cpus.ToList(), m.MemoryModules.ToList(), m.Disks.ToList(), m.Volumes.ToList(),
         m.Adapters.Select(AdapterDto.From).ToList(), m.Software.ToList(),
-        m.Collectors.Select(c => new CollectorResultDto(c.Name, c.Status, c.Error)).ToList());
+        m.Collectors.Select(c => new CollectorResultDto(c.Name, c.Status, c.Error)).ToList(),
+        m.TargetBlock);
 
     public Machine ToMachine()
     {
         var m = new Machine(Address) { Name = Name, Fqdn = Fqdn, DeviceType = DeviceType, IsVirtual = IsVirtual,
             Vendor = Vendor, Status = Status, StatusDetail = StatusDetail, DiscoveryMethod = DiscoveryMethod,
             IcmpTtl = IcmpTtl, LastScanned = LastScanned, TotalMemoryBytes = TotalMemoryBytes,
-            MemorySlotsUsed = MemorySlotsUsed, MemorySlotsTotal = MemorySlotsTotal };
+            MemorySlotsUsed = MemorySlotsUsed, MemorySlotsTotal = MemorySlotsTotal, TargetBlock = TargetBlock };
         foreach (var ip in IpAddresses) if (!m.IpAddresses.Contains(ip)) m.IpAddresses.Add(ip);
         foreach (var mac in MacAddresses) m.MacAddresses.Add(mac);
         System.ApplyTo(m.System);
