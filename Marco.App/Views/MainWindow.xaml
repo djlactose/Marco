@@ -250,6 +250,32 @@
                       MinHeight="40" MaxHeight="180" Margin="4,4,0,0">
                 <ListBox ItemsSource="{Binding History}" BorderThickness="0"
                          MouseDoubleClick="OnHistoryListDoubleClick">
+                  <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                      <!-- ContextMenus sit outside the visual tree; Tag carries the window VM across, while the
+                           menu's inherited DataContext stays the entry itself (the CommandParameter). -->
+                      <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListBox}}" />
+                      <Setter Property="ContextMenu">
+                        <Setter.Value>
+                          <ContextMenu>
+                            <MenuItem Header="Open"
+                                      Command="{Binding PlacementTarget.Tag.OpenHistoryEntryCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      CommandParameter="{Binding}" />
+                            <MenuItem Header="Compare with current grid"
+                                      Command="{Binding PlacementTarget.Tag.CompareWithCurrentCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      CommandParameter="{Binding}" />
+                            <MenuItem Header="Compare with previous run"
+                                      Command="{Binding PlacementTarget.Tag.CompareWithPreviousCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      CommandParameter="{Binding}" />
+                            <Separator />
+                            <MenuItem Header="Delete"
+                                      Command="{Binding PlacementTarget.Tag.DeleteHistoryEntryCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      CommandParameter="{Binding}" />
+                          </ContextMenu>
+                        </Setter.Value>
+                      </Setter>
+                    </Style>
+                  </ListBox.ItemContainerStyle>
                   <ListBox.ItemTemplate>
                     <DataTemplate>
                       <Grid Background="Transparent" ToolTip="{Binding ToolTipText}">
@@ -383,6 +409,8 @@
               <Separator Style="{x:Null}" Width="1" Background="{StaticResource BorderBrush}" Margin="6,2" />
               <Button Content="Open scan…" Command="{Binding OpenScanCommand}"
                       ToolTip="Load a previously exported JSON scan back into the grid" />
+              <Button Content="Compare…" Command="{Binding CompareCommand}"
+                      ToolTip="Diff the current grid against the most recent saved scan of these ranges" />
               <Button Content="Export CSV" Command="{Binding ExportCsvCommand}" />
               <Button Content="Export JSON" Command="{Binding ExportJsonCommand}" />
             </StackPanel>

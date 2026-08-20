@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Windows;
 using CommunityToolkit.Mvvm.Input;
+using Marco.App.Views;
+using Marco.Export;
 using Marco.Export.History;
 
 namespace Marco.App.ViewModels;
@@ -94,6 +96,7 @@ public partial class MainViewModel
         foreach (var entry in entries)
             History.Add(new HistoryEntryDisplay(entry));
         OnPropertyChanged(nameof(HistorySummary));
+        CompareCommand.NotifyCanExecuteChanged();
     }
 
     [RelayCommand(CanExecute = nameof(CanOpenScan))]
@@ -123,5 +126,67 @@ public partial class MainViewModel
         History.Remove(item);
         OnPropertyChanged(nameof(HistorySummary));
         StatusLine = $"Deleted saved scan from {item.TimeText}.";
+    }
+
+    // --- Compare (scan diff) ---
+
+    private bool CanCompare() => !IsRunning && Machines.Count > 0 && History.Count > 0;
+
+    /// <summary>Toolbar "Compare…": current grid vs the most recent saved run that isn't this run's own
+    /// auto-save (comparing a run with its own snapshot is always empty), preferring one that scanned
+    /// overlapping ranges so unrelated networks don't diff against each other.</summary>
+    [RelayCommand(CanExecute = nameof(CanCompare))]
+    private Task CompareAsync()
+    {
+        var candidates = History.Where(h => !string.Equals(h.Entry.Id, _currentRunId, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (candidates.Count == 0) { StatusLine = "No earlier saved scan to compare with."; return Task.CompletedTask; }
+        var baseline = candidates.FirstOrDefault(h => h.Entry.Ranges.Intersect(LastRanges, StringComparer.OrdinalIgnoreCase).Any())
+                       ?? candidates[0];
+        return CompareWithCurrentAsync(baseline);
+    }
+
+    /// <summary>History context menu: this saved run (older) vs whatever is in the grid now (newer).</summary>
+    [RelayCommand(CanExecute = nameof(CanInventory))]
+    private async Task CompareWithCurrentAsync(HistoryEntryDisplay? item)
+    {
+        if (item is null || Machines.Count == 0) return;
+        var store = HistoryStore;
+        var newer = BuildDocument(filteredOnly: false);
+        await ShowDiffAsync(
+            () => store.LoadDocument(item.Entry), item.TimeText,
+            () => newer, "current grid");
+    }
+
+    /// <summary>History context menu: this saved run vs the next older one in the list.</summary>
+    [RelayCommand]
+    private async Task CompareWithPreviousAsync(HistoryEntryDisplay? item)
+    {
+        if (item is null) return;
+        var index = History.IndexOf(item);
+        var previous = index >= 0 && index + 1 < History.Count ? History[index + 1] : null;
+        if (previous is null) { StatusLine = "No older saved scan to compare against."; return; }
+        var store = HistoryStore;
+        await ShowDiffAsync(
+            () => store.LoadDocument(previous.Entry), previous.TimeText,
+            () => store.LoadDocument(item.Entry), item.TimeText);
+    }
+
+    private async Task ShowDiffAsync(Func<ScanDocument> older, string olderName, Func<ScanDocument> newer, string newerName)
+    {
+        try
+        {
+            var diff = await Task.Run(() => Marco.Export.Diff.ScanDiffEngine.Compute(older(), newer()));
+            var window = new ScanDiffWindow(new ScanDiffViewModel(diff, olderName, newerName))
+            {
+                Owner = Application.Current.MainWindow,
+            };
+            window.Show();
+            StatusLine = $"Compared {olderName} → {newerName}: {diff.Summary}";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Could not compare the scans:\n{ex.Message}",
+                "Compare scans", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 }

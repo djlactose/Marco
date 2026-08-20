@@ -288,7 +288,10 @@ public partial class MainViewModel : ObservableObject
         if (added && SelectedMachine is null && Machines.Count > 0)
             SelectedMachine = Machines[0];
         if (added)
+        {
             InventoryAliveCommand.NotifyCanExecuteChanged(); // CanInventory depends on Machines.Count
+            CompareCommand.NotifyCanExecuteChanged();
+        }
     }
 
     private bool CanStart() => !IsRunning;
@@ -436,6 +439,8 @@ public partial class MainViewModel : ObservableObject
         InventorySelectedCommand.NotifyCanExecuteChanged();
         OpenScanCommand.NotifyCanExecuteChanged();
         OpenHistoryEntryCommand.NotifyCanExecuteChanged();
+        CompareCommand.NotifyCanExecuteChanged();
+        CompareWithCurrentCommand.NotifyCanExecuteChanged();
         AddCredentialCommand.NotifyCanExecuteChanged();
         RemoveCredentialCommand.NotifyCanExecuteChanged();
         EditCredentialCommand.NotifyCanExecuteChanged();

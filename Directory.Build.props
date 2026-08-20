@@ -3,7 +3,7 @@
     <!-- Single source of truth for Marco's version. This is the NEXT STABLE version; CI overrides it with
          -p:Version=X.Y.Z-beta.N for beta builds from the develop branch. Bump it on develop right after a
          stable release is cut from main (the release workflow refuses to re-release an existing tag). -->
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Product>Marco</Product>
     <Company>djlactose</Company>
     <!-- Keep InformationalVersion exactly the version string (no +git-sha suffix) so runtime parse/display is clean. -->
