@@ -34,12 +34,12 @@ public sealed class UpdatesCollector : IInventoryCollector
         {
             var rows = await context.Wmi.QueryAsync(WmiQueryHelpers.CimV2,
                 "SELECT HotFixID, Description, InstalledOn, InstalledBy FROM Win32_QuickFixEngineering", ct);
-            machine.Hotfixes.Clear();
+            var list = new List<HotfixEntry>();
             foreach (var r in rows)
             {
                 var id = r.GetString("HotFixID")?.Trim();
                 if (string.IsNullOrEmpty(id)) continue;
-                machine.Hotfixes.Add(new HotfixEntry
+                list.Add(new HotfixEntry
                 {
                     Id = id,
                     Description = r.GetString("Description")?.Trim(),
@@ -47,7 +47,8 @@ public sealed class UpdatesCollector : IInventoryCollector
                     InstalledBy = r.GetString("InstalledBy")?.Trim(),
                 });
             }
-            machine.Hotfixes.Sort((a, b) => Nullable.Compare(b.InstalledOn, a.InstalledOn));
+            list.Sort((a, b) => Nullable.Compare(b.InstalledOn, a.InstalledOn));
+            machine.Hotfixes = list;
             u.HotfixCount = machine.Hotfixes.Count;
             u.LastHotfixDate = machine.Hotfixes.Max(h => h.InstalledOn);
         });

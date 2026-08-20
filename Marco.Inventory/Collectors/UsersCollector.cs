@@ -38,12 +38,12 @@ public sealed class UsersCollector : IInventoryCollector
                 var rows = await wmi.QueryAsync(WmiQueryHelpers.CimV2,
                     "SELECT Name, FullName, SID, Disabled, Lockout, PasswordRequired, PasswordExpires, Description "
                     + "FROM Win32_UserAccount WHERE LocalAccount = TRUE", ct);
-                machine.LocalAccounts.Clear();
+                var accounts = new List<LocalAccountEntry>();
                 foreach (var r in rows)
                 {
                     var name = r.GetString("Name")?.Trim();
                     if (string.IsNullOrEmpty(name)) continue;
-                    machine.LocalAccounts.Add(new LocalAccountEntry
+                    accounts.Add(new LocalAccountEntry
                     {
                         Name = name,
                         FullName = r.GetString("FullName")?.Trim(),
@@ -55,7 +55,8 @@ public sealed class UsersCollector : IInventoryCollector
                         Description = r.GetString("Description")?.Trim(),
                     });
                 }
-                machine.LocalAccounts.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+                accounts.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+                machine.LocalAccounts = accounts;
             });
         }
 
@@ -71,14 +72,15 @@ public sealed class UsersCollector : IInventoryCollector
             var name = group.GetString("Name") ?? "Administrators";
             var members = await wmi.QueryAsync(WmiQueryHelpers.CimV2,
                 $"SELECT PartComponent FROM Win32_GroupUser WHERE GroupComponent = \"Win32_Group.Domain='{Escape(domain)}',Name='{Escape(name)}'\"", ct);
-            machine.LocalAdministrators.Clear();
+            var admins = new List<string>();
             foreach (var m in members)
             {
                 var display = ParseAccountRef(m.GetString("PartComponent"));
-                if (display is not null && !machine.LocalAdministrators.Contains(display, StringComparer.OrdinalIgnoreCase))
-                    machine.LocalAdministrators.Add(display);
+                if (display is not null && !admins.Contains(display, StringComparer.OrdinalIgnoreCase))
+                    admins.Add(display);
             }
-            machine.LocalAdministrators.Sort(StringComparer.OrdinalIgnoreCase);
+            admins.Sort(StringComparer.OrdinalIgnoreCase);
+            machine.LocalAdministrators = admins;
 
             // Flag the local accounts that are admins.
             foreach (var acct in machine.LocalAccounts)
@@ -92,12 +94,12 @@ public sealed class UsersCollector : IInventoryCollector
         {
             var rows = await wmi.QueryAsync(WmiQueryHelpers.CimV2,
                 "SELECT LocalPath, SID, LastUseTime, Loaded FROM Win32_UserProfile WHERE Special = FALSE", ct);
-            machine.UserProfiles.Clear();
+            var profiles = new List<UserProfileEntry>();
             foreach (var r in rows)
             {
                 var path = r.GetString("LocalPath");
                 if (string.IsNullOrWhiteSpace(path)) continue;
-                machine.UserProfiles.Add(new UserProfileEntry
+                profiles.Add(new UserProfileEntry
                 {
                     User = ProfileLeaf(path),
                     LocalPath = path,
@@ -106,7 +108,8 @@ public sealed class UsersCollector : IInventoryCollector
                     Loaded = r.GetBool("Loaded") ?? false,
                 });
             }
-            machine.UserProfiles.Sort((a, b) => Nullable.Compare(b.LastUse, a.LastUse));
+            profiles.Sort((a, b) => Nullable.Compare(b.LastUse, a.LastUse));
+            machine.UserProfiles = profiles;
         });
 
         // 4. Interactive / RDP sessions.
@@ -115,7 +118,7 @@ public sealed class UsersCollector : IInventoryCollector
         {
             var sessions = await wmi.QueryAsync(WmiQueryHelpers.CimV2,
                 "SELECT LogonId, LogonType, StartTime FROM Win32_LogonSession WHERE LogonType = 2 OR LogonType = 10 OR LogonType = 11", ct);
-            if (sessions.Count == 0) { machine.LogonSessions.Clear(); return; }
+            if (sessions.Count == 0) { machine.LogonSessions = new List<LogonSessionEntry>(); return; }
             var byId = sessions
                 .Where(s => s.GetString("LogonId") is not null)
                 .GroupBy(s => s.GetString("LogonId")!)
@@ -144,8 +147,7 @@ public sealed class UsersCollector : IInventoryCollector
                     found[key] = new LogonSessionEntry { Account = display, LogonType = type, StartTime = start };
                 }
             }
-            machine.LogonSessions.Clear();
-            machine.LogonSessions.AddRange(found.Values.OrderBy(v => v.StartTime ?? DateTime.MaxValue));
+            machine.LogonSessions = found.Values.OrderBy(v => v.StartTime ?? DateTime.MaxValue).ToList();
         });
 
         // 5. Per-account last logon (and a better "last user" when the registry heuristic had nothing).

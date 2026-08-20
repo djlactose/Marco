@@ -15,12 +15,12 @@ public sealed class ServicesCollector : IInventoryCollector
     {
         var rows = await context.Wmi.QueryAsync(WmiQueryHelpers.CimV2,
             "SELECT Name, DisplayName, State, StartMode, StartName, PathName, ProcessId FROM Win32_Service", ct);
-        machine.Services.Clear();
+        var services = new List<ServiceEntry>();
         foreach (var r in rows)
         {
             var name = r.GetString("Name")?.Trim();
             if (string.IsNullOrEmpty(name)) continue;
-            machine.Services.Add(new ServiceEntry
+            services.Add(new ServiceEntry
             {
                 Name = name,
                 DisplayName = r.GetString("DisplayName")?.Trim() ?? name,
@@ -31,16 +31,17 @@ public sealed class ServicesCollector : IInventoryCollector
                 ProcessId = r.GetInt("ProcessId") is { } pid and > 0 ? pid : null,
             });
         }
-        machine.Services.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase));
+        services.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase));
+        machine.Services = services;
 
         // Startup items are a bonus — a provider hiccup here must not lose the service list.
         ct.ThrowIfCancellationRequested();
         var startup = await context.Wmi.QueryOptionalAsync(
             "SELECT Name, Command, Location, User FROM Win32_StartupCommand", ct);
-        machine.StartupItems.Clear();
+        var items = new List<StartupEntry>();
         foreach (var s in startup)
         {
-            machine.StartupItems.Add(new StartupEntry
+            items.Add(new StartupEntry
             {
                 Name = s.GetString("Name")?.Trim(),
                 Command = s.GetString("Command")?.Trim(),
@@ -48,7 +49,8 @@ public sealed class ServicesCollector : IInventoryCollector
                 User = s.GetString("User")?.Trim(),
             });
         }
-        machine.StartupItems.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+        items.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+        machine.StartupItems = items;
 
         machine.RefreshCounts();
     }
@@ -65,13 +67,13 @@ public sealed class ScheduledTasksCollector : IInventoryCollector
     {
         var rows = await context.Wmi.QueryAsync(WmiQueryHelpers.TaskScheduler,
             "SELECT TaskName, TaskPath, State, Author, Date, Principal FROM MSFT_ScheduledTask", ct);
-        machine.ScheduledTasks.Clear();
+        var tasks = new List<ScheduledTaskEntry>();
         foreach (var r in rows)
         {
             var path = r.GetString("TaskPath") ?? "\\";
             if (IsMicrosoftPath(path)) continue;
             var principal = r["Principal"] as WmiObject;
-            machine.ScheduledTasks.Add(new ScheduledTaskEntry
+            tasks.Add(new ScheduledTaskEntry
             {
                 Name = r.GetString("TaskName"),
                 Path = path,
@@ -81,7 +83,8 @@ public sealed class ScheduledTasksCollector : IInventoryCollector
                 Created = r.GetDateTime("Date"),
             });
         }
-        machine.ScheduledTasks.Sort((a, b) => string.Compare(a.Path + a.Name, b.Path + b.Name, StringComparison.OrdinalIgnoreCase));
+        tasks.Sort((a, b) => string.Compare(a.Path + a.Name, b.Path + b.Name, StringComparison.OrdinalIgnoreCase));
+        machine.ScheduledTasks = tasks;
     }
 
     public static bool IsMicrosoftPath(string path)

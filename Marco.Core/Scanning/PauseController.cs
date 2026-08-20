@@ -9,8 +9,14 @@ public sealed class PauseController
 {
     private volatile TaskCompletionSource<bool> _tcs =
         CreateCompleted();
+    private readonly System.Diagnostics.Stopwatch _pausedTime = new();
 
     public bool IsPaused => !_tcs.Task.IsCompleted;
+
+    /// <summary>Total wall-clock time this run has spent paused. The ETA rate math subtracts it from elapsed
+    /// so a long pause doesn't inflate the per-item cost (hosts already in flight when Pause hits keep
+    /// finishing "on paused time" — accepted imprecision).</summary>
+    public TimeSpan PausedTime => _pausedTime.Elapsed;
 
     public void Pause()
     {
@@ -20,11 +26,21 @@ public sealed class PauseController
             var current = _tcs;
             if (!current.Task.IsCompleted) return; // already paused
             var next = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            if (Interlocked.CompareExchange(ref _tcs, next, current) == current) return;
+            if (Interlocked.CompareExchange(ref _tcs, next, current) == current)
+            {
+                _pausedTime.Start();
+                return;
+            }
         }
     }
 
-    public void Resume() => _tcs.TrySetResult(true);
+    public void Resume()
+    {
+        _tcs.TrySetResult(true);
+        // IsRunning guard keeps this idempotent, and correct when a worker's ct registration opened the
+        // gate first (cancel-while-paused) before the owner's Resume() lands.
+        if (_pausedTime.IsRunning) _pausedTime.Stop();
+    }
 
     public async Task WaitWhilePausedAsync(CancellationToken ct)
     {

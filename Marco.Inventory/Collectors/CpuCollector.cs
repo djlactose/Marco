@@ -15,10 +15,10 @@ public sealed class CpuCollector : IInventoryCollector
             "SELECT Name, NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed, SocketDesignation FROM Win32_Processor",
             ct);
 
-        machine.Cpus.Clear();
+        var list = new List<CpuInfo>();
         foreach (var c in cpus)
         {
-            machine.Cpus.Add(new CpuInfo
+            list.Add(new CpuInfo
             {
                 Name = c.GetString("Name")?.Trim(),
                 Cores = c.GetInt("NumberOfCores") ?? 0,
@@ -27,6 +27,7 @@ public sealed class CpuCollector : IInventoryCollector
                 Socket = c.GetString("SocketDesignation"),
             });
         }
+        machine.Cpus = list;
         machine.RefreshCounts();
     }
 }

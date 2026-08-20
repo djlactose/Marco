@@ -30,7 +30,7 @@ public sealed class NetworkCollector : IInventoryCollector
             "SELECT Index, Description, MACAddress, IPAddress, IPSubnet, DefaultIPGateway, " +
             "DNSServerSearchOrder, DHCPEnabled FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = TRUE", ct);
 
-        machine.Adapters.Clear();
+        var list = new List<AdapterInfo>();
         foreach (var c in configs)
         {
             var idx = c.GetInt("Index");
@@ -49,11 +49,12 @@ public sealed class NetworkCollector : IInventoryCollector
             foreach (var dns in c.GetStringArray("DNSServerSearchOrder") ?? Array.Empty<string>())
                 if (!string.IsNullOrWhiteSpace(dns)) adapter.DnsServers.Add(dns);
 
-            machine.Adapters.Add(adapter);
+            list.Add(adapter);
 
             if (!string.IsNullOrWhiteSpace(adapter.Mac) && !machine.MacAddresses.Contains(adapter.Mac))
                 machine.MacAddresses.Add(adapter.Mac);
         }
+        machine.Adapters = list;
         machine.RefreshCounts();
     }
 

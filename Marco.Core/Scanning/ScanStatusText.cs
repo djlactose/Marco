@@ -8,8 +8,10 @@ namespace Marco.Core.Scanning;
 public static class ScanStatusText
 {
     /// <summary>Returns the status line, or an empty string for phases that have no in-run text (Idle,
-    /// Complete, Cancelled — the caller writes its own summary for those).</summary>
-    public static string Compose(ScanProgress p, bool paused, bool cancelling)
+    /// Complete, Cancelled — the caller writes its own summary for those). <paramref name="activity"/> is an
+    /// optional "what inventory is doing right now" suffix; it only decorates the running-inventory text, never
+    /// paused/stopping wording.</summary>
+    public static string Compose(ScanProgress p, bool paused, bool cancelling, string? activity = null)
     {
         var total = p.Total?.ToString("N0") ?? "?";
         int n = Math.Max(0, p.InFlight);
@@ -18,7 +20,7 @@ public static class ScanStatusText
         {
             case ScanPhase.Discovery:
                 if (cancelling)
-                    return n > 0 ? $"Cancelling… finishing {n:N0} in-flight probe{Plural(n)}." : "Cancelling…";
+                    return n > 0 ? $"Stopping… finishing {n:N0} in-flight probe{Plural(n)}." : "Stopping…";
                 if (paused)
                     return $"Paused at {p.Completed:N0}/{total} · {p.Alive:N0} alive"
                         + (n > 0 ? $" ({n:N0} in flight finishing)" : "");
@@ -26,11 +28,12 @@ public static class ScanStatusText
 
             case ScanPhase.Inventory:
                 if (cancelling)
-                    return n > 0 ? $"Cancelling inventory… finishing {n:N0} host{Plural(n)}." : "Cancelling inventory…";
+                    return n > 0 ? $"Stopping inventory… {n:N0} host{Plural(n)} finishing in the background." : "Stopping inventory…";
                 if (paused)
                     return $"Inventory paused at {p.Completed:N0}/{total}"
                         + (n > 0 ? $" ({n:N0} host{Plural(n)} finishing)" : "");
-                return $"Inventorying… {p.Completed:N0}/{total}";
+                return $"Inventorying… {p.Completed:N0}/{total}"
+                    + (string.IsNullOrEmpty(activity) ? "" : $" — {activity}");
 
             default:
                 return "";

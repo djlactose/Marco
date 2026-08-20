@@ -358,6 +358,41 @@ public class ScanControllerTests
         Assert.True(last.Completed < 20);
     }
 
+    [Fact]
+    public async Task Eta_ExcludesPausedTime()
+    {
+        var gates = new ProbeGates();
+        var liveness = new FakeLivenessProbe { BeforeProbe = gates.WaitAsync };
+        var addrs = new[] { "10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4" };
+        foreach (var a in addrs) liveness.Alive.Add(a);
+
+        var progress = new SyncProgress<ScanProgress>();
+        var pause = new PauseController();
+        var run = Build(liveness).RunDiscoveryAsync(
+            Targets(addrs), FastSettings(), 4, false, _ => { }, progress, pause, default);
+
+        await WaitUntilAsync(() => liveness.Calls.Count == 4);   // all four parked inside the probe
+        gates.Release("10.0.0.1");
+        await WaitUntilAsync(() => progress.Reports.Any(p => p.Completed == 1));
+
+        pause.Pause();
+        await Task.Delay(1500);                                   // paused time the rate math must NOT count
+        pause.Resume();
+
+        gates.Release("10.0.0.2");
+        await WaitUntilAsync(() => progress.Reports.Any(p => p.Phase == ScanPhase.Discovery && p.Completed == 2));
+
+        // 2 done, 2 remaining: pause-inclusive math would say >= the full 1.5s pause; active-time math says
+        // only genuine work time, far under half of it even on a slow CI box.
+        var report = progress.Reports.First(p => p.Phase == ScanPhase.Discovery && p.Completed == 2);
+        Assert.NotNull(report.EstimatedRemaining);
+        Assert.True(report.EstimatedRemaining < TimeSpan.FromMilliseconds(750),
+            $"ETA {report.EstimatedRemaining} suggests paused time was counted as work time");
+
+        gates.ReleaseAll();
+        await run;
+    }
+
     // --- Concurrency cap ---------------------------------------------------------------------------------------
 
     /// <summary>The requested degree of parallelism is clamped to ScanSettings.MaxConcurrency (and floored at 1):

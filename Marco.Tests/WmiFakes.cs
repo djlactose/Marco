@@ -117,3 +117,15 @@ internal sealed class FakeRemoteRegistryFactory : IRemoteRegistryFactory
     public FakeRemoteRegistryFactory(IRemoteRegistry registry) => _registry = registry;
     public IRemoteRegistry Create(string host, WmiCredential? credential, IWmiSession wmiSession) => _registry;
 }
+
+/// <summary>Connect blocks until the gate is released — proves a Stop mid-connect unblocks the awaiting
+/// caller promptly (the abandoned connect drains via <see cref="Marco.Core.Threading.AbandonableTask"/>,
+/// exactly like the real SystemManagementWmiSessionFactory).</summary>
+internal sealed class GatedWmiSessionFactory : IWmiSessionFactory
+{
+    public TaskCompletionSource<IWmiSession> Gate { get; } =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public Task<IWmiSession> ConnectAsync(string host, WmiCredential? credential, CancellationToken ct)
+        => Marco.Core.Threading.AbandonableTask.AwaitOrAbandonAsync(Gate.Task, ct, onAbandonedResult: s => s.Dispose());
+}

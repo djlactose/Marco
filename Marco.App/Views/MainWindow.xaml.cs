@@ -13,6 +13,21 @@ public partial class MainWindow : Window
         InitializeComponent();
     }
 
+    private void OnMachineRowDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        // Walks from wherever the click landed up to the row; group-expander headers and column headers
+        // terminate at null, so only a real machine row opens the full-screen view.
+        var node = e.OriginalSource as DependencyObject;
+        while (node is not null and not DataGridRow)
+            node = node is Visual ? VisualTreeHelper.GetParent(node) : LogicalTreeHelper.GetParent(node);
+        if (node is DataGridRow { DataContext: Marco.Core.Model.Machine m }
+            && DataContext is MainViewModel vm
+            && vm.OpenMachineDetailCommand.CanExecute(m))
+        {
+            vm.OpenMachineDetailCommand.Execute(m);
+        }
+    }
+
     private void OnCredentialListDoubleClick(object sender, MouseButtonEventArgs e)
     {
         var list = (ListBox)sender;

@@ -36,7 +36,7 @@ public sealed class SecurityCollector : IInventoryCollector
         // 1. Security Center products (client SKUs only — the namespace does not exist on Server).
         await steps.RunAsync("Security Center", async () =>
         {
-            machine.Antivirus.Clear();
+            var av = new List<AntivirusEntry>();
             foreach (var (cls, kind) in new[] { ("AntiVirusProduct", "Antivirus"), ("AntiSpywareProduct", "Antispyware"), ("FirewallProduct", "Firewall") })
             {
                 IReadOnlyList<WmiObject> rows;
@@ -48,7 +48,7 @@ public sealed class SecurityCollector : IInventoryCollector
                 {
                     var state = r.GetInt("productState");
                     var (enabled, upToDate) = state is { } st ? DecodeProductState(st) : (null, null);
-                    machine.Antivirus.Add(new AntivirusEntry
+                    av.Add(new AntivirusEntry
                     {
                         Product = r.GetString("displayName")?.Trim(),
                         Kind = kind,
@@ -58,6 +58,7 @@ public sealed class SecurityCollector : IInventoryCollector
                     });
                 }
             }
+            machine.Antivirus = av;
         });
 
         // 2. Defender itself (also on servers, where Security Center is absent).
@@ -118,10 +119,10 @@ public sealed class SecurityCollector : IInventoryCollector
         {
             var rows = await wmi.QueryAsync(WmiQueryHelpers.VolumeEncryption,
                 "SELECT DriveLetter, ProtectionStatus, ConversionStatus, EncryptionMethod, VolumeType FROM Win32_EncryptableVolume", ct);
-            s.BitLockerVolumes.Clear();
+            var volumes = new List<BitLockerVolumeEntry>();
             foreach (var r in rows)
             {
-                s.BitLockerVolumes.Add(new BitLockerVolumeEntry
+                volumes.Add(new BitLockerVolumeEntry
                 {
                     Letter = r.GetString("DriveLetter"),
                     Protection = r.GetInt("ProtectionStatus") switch { 0 => "Off", 1 => "On", 2 => "Unknown", _ => null },
@@ -130,7 +131,8 @@ public sealed class SecurityCollector : IInventoryCollector
                     VolumeType = r.GetInt("VolumeType") switch { 0 => "OS", 1 => "Fixed data", 2 => "Removable", _ => null },
                 });
             }
-            s.BitLockerVolumes.Sort((a, b) => string.CompareOrdinal(a.Letter, b.Letter));
+            volumes.Sort((a, b) => string.CompareOrdinal(a.Letter, b.Letter));
+            s.BitLockerVolumes = volumes;
         });
 
         // 5. TPM.

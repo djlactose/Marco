@@ -36,12 +36,12 @@ public sealed class PeripheralsCollector : IInventoryCollector
                 if (inst is not null && d is { } di) sizeByInstance[inst] = di;
             }
 
-            machine.Monitors.Clear();
+            var monitors = new List<MonitorEntry>();
             foreach (var r in ids)
             {
                 var inst = r.GetString("InstanceName");
                 var mfg = DecodeWmiString(r["ManufacturerName"]);
-                machine.Monitors.Add(new MonitorEntry
+                monitors.Add(new MonitorEntry
                 {
                     Manufacturer = MonitorVendorName(mfg),
                     Model = DecodeWmiString(r["UserFriendlyName"]),
@@ -53,6 +53,7 @@ public sealed class PeripheralsCollector : IInventoryCollector
                     Active = r.GetBool("Active") ?? true,
                 });
             }
+            machine.Monitors = monitors;
         });
 
         // 2. GPUs.
@@ -61,13 +62,13 @@ public sealed class PeripheralsCollector : IInventoryCollector
         {
             var rows = await wmi.QueryAsync(WmiQueryHelpers.CimV2,
                 "SELECT Name, AdapterRAM, DriverVersion, DriverDate, CurrentHorizontalResolution, CurrentVerticalResolution, CurrentRefreshRate FROM Win32_VideoController", ct);
-            machine.Gpus.Clear();
+            var gpus = new List<GpuInfo>();
             foreach (var r in rows)
             {
                 var name = r.GetString("Name")?.Trim();
                 if (string.IsNullOrEmpty(name) || IsVirtualDisplayAdapter(name)) continue; // RDP/session adapters come and go
                 var h = r.GetInt("CurrentHorizontalResolution"); var v = r.GetInt("CurrentVerticalResolution"); var hz = r.GetInt("CurrentRefreshRate");
-                machine.Gpus.Add(new GpuInfo
+                gpus.Add(new GpuInfo
                 {
                     Name = name,
                     VramBytes = (long)(r.GetULong("AdapterRAM") ?? 0),
@@ -76,6 +77,7 @@ public sealed class PeripheralsCollector : IInventoryCollector
                     Resolution = h is > 0 && v is > 0 ? $"{h}x{v}" + (hz is > 0 ? $" @ {hz} Hz" : "") : null,
                 });
             }
+            machine.Gpus = gpus;
 
             // AdapterRAM is a 32-bit field and caps at 4 GB; the display class key carries the real size (QWORD),
             // readable over the SMB registry path. Best-effort.
@@ -88,7 +90,7 @@ public sealed class PeripheralsCollector : IInventoryCollector
                     var desc = RegistryValues.AsString(RegistryValues.Get(k.Values, "DriverDesc"));
                     var qw = RegistryValues.AsLong(RegistryValues.Get(k.Values, "HardwareInformation.qwMemorySize"));
                     if (desc is null || qw is not { } bytes || bytes <= 0) continue;
-                    var gpu = machine.Gpus.FirstOrDefault(g => string.Equals(g.Name, desc, StringComparison.OrdinalIgnoreCase));
+                    var gpu = gpus.FirstOrDefault(g => string.Equals(g.Name, desc, StringComparison.OrdinalIgnoreCase));
                     if (gpu is not null && bytes > gpu.VramBytes) gpu.VramBytes = bytes;
                 }
             }
@@ -106,13 +108,13 @@ public sealed class PeripheralsCollector : IInventoryCollector
             foreach (var p in ports)
                 if (p.GetString("Name") is { } pn && p.GetString("HostAddress") is { } ha) hostByPort[pn] = ha;
 
-            machine.Printers.Clear();
+            var printers = new List<PrinterEntry>();
             foreach (var r in rows)
             {
                 var name = r.GetString("Name")?.Trim();
                 if (string.IsNullOrEmpty(name) || IsBuiltInVirtualPrinter(name)) continue;
                 var port = r.GetString("PortName");
-                machine.Printers.Add(new PrinterEntry
+                printers.Add(new PrinterEntry
                 {
                     Name = name,
                     IsDefault = r.GetBool("Default") ?? false,
@@ -126,9 +128,7 @@ public sealed class PeripheralsCollector : IInventoryCollector
                     Status = r.GetBool("WorkOffline") == true ? "Offline" : DescribePrinterStatus(r.GetInt("PrinterStatus")),
                 });
             }
-            var ordered = machine.Printers.OrderBy(p => !p.IsDefault).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
-            machine.Printers.Clear();
-            machine.Printers.AddRange(ordered);
+            machine.Printers = printers.OrderBy(p => !p.IsDefault).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
         });
 
         // 4. USB devices currently attached (hubs and controllers filtered out).
@@ -138,12 +138,12 @@ public sealed class PeripheralsCollector : IInventoryCollector
             // SELECT * so the query is valid on Windows 7 (no PNPClass property there); the row count is small.
             var rows = await wmi.QueryAsync(WmiQueryHelpers.CimV2,
                 "SELECT * FROM Win32_PnPEntity WHERE DeviceID LIKE 'USB\\\\%'", ct);
-            machine.UsbDevices.Clear();
+            var usb = new List<UsbDeviceEntry>();
             foreach (var r in rows)
             {
                 var name = r.GetString("Name")?.Trim();
                 if (string.IsNullOrEmpty(name) || IsUsbInfrastructure(name, r.GetString("Service"))) continue;
-                machine.UsbDevices.Add(new UsbDeviceEntry
+                usb.Add(new UsbDeviceEntry
                 {
                     Name = name,
                     Manufacturer = r.GetString("Manufacturer")?.Trim(),
@@ -152,7 +152,8 @@ public sealed class PeripheralsCollector : IInventoryCollector
                     Status = r.GetString("Status"),
                 });
             }
-            machine.UsbDevices.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+            usb.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+            machine.UsbDevices = usb;
         });
 
         // 5. Battery.

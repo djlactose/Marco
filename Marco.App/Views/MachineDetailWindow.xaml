@@ -1,0 +1,13 @@
+<Window x:Class="Marco.App.Views.MachineDetailWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{Binding DisplayName, StringFormat='{}{0} — Marco'}"
+        Icon="/Assets/marco.ico"
+        WindowState="Maximized" Height="760" Width="1100"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="Segoe UI" FontSize="13"
+        Background="{StaticResource PanelBrush}">
+  <!-- DataContext is the LIVE Machine (never a snapshot): the shared template re-renders in place as
+       inventory fills the host in. Height/Width are only the restore size when un-maximized. -->
+  <ContentControl Content="{Binding}" ContentTemplate="{StaticResource MachineDetailTemplate}" />
+</Window>

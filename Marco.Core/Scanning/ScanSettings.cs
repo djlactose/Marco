@@ -7,8 +7,9 @@ public sealed class ScanSettings
     /// [1, <see cref="MaxConcurrency"/>] at run time — see <see cref="EffectiveDiscoveryConcurrency"/>.</summary>
     public int DiscoveryConcurrency { get; set; } = 32;
 
-    /// <summary>Concurrent hosts during inventory — deliberately lower than discovery, since each host is a
-    /// DCOM auth plus dozens of WMI queries plus a bulk registry read and 32-wide can swamp a WAN link. Clamped
+    /// <summary>Concurrent hosts during inventory. The UI drives this from the same Concurrency box as
+    /// discovery; the default only applies when nothing sets it. Each host is a DCOM auth plus dozens of WMI
+    /// queries plus a bulk registry read, so lower this for WAN links. Clamped
     /// to [1, <see cref="MaxConcurrency"/>] at run time — see <see cref="EffectiveInventoryConcurrency"/>.</summary>
     public int InventoryConcurrency { get; set; } = 16;
 

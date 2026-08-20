@@ -41,7 +41,23 @@ public sealed class LinuxInventoryRunner
     {
         machine.Status = MachineStatus.Scanning;
         machine.StatusDetail = null;
+        try
+        {
+            return await InventoryCoreAsync(machine, candidates, perHostOverrides, enabledCollectors, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            machine.CurrentActivity = null; // every exit path — auth failure, cancel mid-collector, success
+        }
+    }
 
+    private async Task<InventoryOutcome> InventoryCoreAsync(
+        Machine machine,
+        IReadOnlyList<CredentialCandidate> candidates,
+        IReadOnlyDictionary<string, CredentialCandidate>? perHostOverrides,
+        ISet<string>? enabledCollectors,
+        CancellationToken ct)
+    {
         var ordered = OrderCandidates(machine.Address, candidates, perHostOverrides)
             .Where(c => !c.Credential.UseCurrentToken && !string.IsNullOrEmpty(c.Credential.Username))
             .ToList();
@@ -56,16 +72,24 @@ public sealed class LinuxInventoryRunner
         CredentialCandidate? winner = null;
         string? lastAuthDetail = null;
 
-        foreach (var candidate in ordered)
+        for (int i = 0; i < ordered.Count; i++)
         {
+            var candidate = ordered[i];
             ct.ThrowIfCancellationRequested();
+            machine.CurrentActivity = ordered.Count == 1
+                ? $"Connecting (SSH, {candidate.Label})…"
+                : $"Connecting (SSH, {candidate.Label}, {i + 1}/{ordered.Count})…";
             var user = candidate.Credential.Username!;
             var pass = ToPlainText(candidate.Credential.Password);
             try
             {
                 int port = candidate.SshPort > 0 ? candidate.SshPort : _port;
-                session = await Task.Run(() =>
-                    _factory.Connect(machine.Address, port, user, pass, _timeoutSeconds, ct), ct).ConfigureAwait(false);
+                // The blocking connect cannot be interrupted, but a Stop must not wait for it: abandon on
+                // cancellation and dispose the session if it lands afterwards.
+                session = await Marco.Core.Threading.AbandonableTask.AwaitOrAbandonAsync<ISshSession>(
+                    Task.Run(() => _factory.Connect(machine.Address, port, user, pass, _timeoutSeconds, ct), ct),
+                    ct,
+                    onAbandonedResult: late => late.Dispose()).ConfigureAwait(false);
                 winner = candidate;
                 break;
             }
@@ -97,6 +121,7 @@ public sealed class LinuxInventoryRunner
             {
                 if (enabledCollectors is not null && !enabledCollectors.Contains(name)) return;
                 ct.ThrowIfCancellationRequested();
+                machine.CurrentActivity = $"Collecting {name}…";
                 machine.SetCollector(name, CollectorStatus.NotRun);
                 try { body(); machine.SetCollector(name, CollectorStatus.Ok); ok++; }
                 catch (OperationCanceledException) { throw; }
@@ -161,8 +186,7 @@ public sealed class LinuxInventoryRunner
         var text = Run(s, "lscpu 2>/dev/null", ct);
         if (string.IsNullOrWhiteSpace(text)) throw new InvalidOperationException("lscpu not available.");
         var cpu = LinuxParsers.ParseLscpu(text);
-        m.Cpus.Clear();
-        m.Cpus.Add(cpu);
+        m.Cpus = new List<CpuInfo> { cpu };
         m.RefreshCounts();
     }
 
@@ -174,18 +198,15 @@ public sealed class LinuxInventoryRunner
 
     private static void CollectStorage(ISshSession s, Machine m, CancellationToken ct)
     {
-        m.Disks.Clear();
-        m.Disks.AddRange(LinuxParsers.ParseLsblk(Run(s, "lsblk -b -d -n -P -o NAME,SIZE,TYPE,MODEL,SERIAL 2>/dev/null", ct)));
-        m.Volumes.Clear();
-        m.Volumes.AddRange(LinuxParsers.ParseDf(Run(s, "df -B1 -T 2>/dev/null", ct)));
+        m.Disks = LinuxParsers.ParseLsblk(Run(s, "lsblk -b -d -n -P -o NAME,SIZE,TYPE,MODEL,SERIAL 2>/dev/null", ct));
+        m.Volumes = LinuxParsers.ParseDf(Run(s, "df -B1 -T 2>/dev/null", ct));
         m.RefreshCounts();
     }
 
     private static void CollectNetwork(ISshSession s, Machine m, CancellationToken ct)
     {
         var adapters = LinuxParsers.ParseIp(Run(s, "ip -o link 2>/dev/null", ct), Run(s, "ip -o -4 addr 2>/dev/null", ct));
-        m.Adapters.Clear();
-        m.Adapters.AddRange(adapters);
+        m.Adapters = adapters;
         foreach (var a in adapters)
             if (!string.IsNullOrWhiteSpace(a.Mac) && !m.MacAddresses.Contains(a.Mac)) m.MacAddresses.Add(a.Mac);
         m.RefreshCounts();
@@ -211,8 +232,7 @@ public sealed class LinuxInventoryRunner
             "apk" => LinuxParsers.ParseApk(Run(s, "apk info -v 2>/dev/null", ct)),
             _ => throw new InvalidOperationException("No supported package manager (dpkg/rpm/apk) found."),
         };
-        m.Software.Clear();
-        m.Software.AddRange(pkgs);
+        m.Software = pkgs;
         m.RefreshCounts();
     }
 

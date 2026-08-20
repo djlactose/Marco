@@ -53,7 +53,23 @@ public sealed class InventoryRunner
     {
         machine.Status = MachineStatus.Scanning;
         machine.StatusDetail = null;
+        try
+        {
+            return await InventoryCoreAsync(machine, candidates, perHostOverrides, enabledCollectors, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            machine.CurrentActivity = null; // every exit path — auth failure, unreachable, cancel mid-collector, success
+        }
+    }
 
+    private async Task<InventoryOutcome> InventoryCoreAsync(
+        Machine machine,
+        IReadOnlyList<CredentialCandidate> candidates,
+        IReadOnlyDictionary<string, CredentialCandidate>? perHostOverrides,
+        ISet<string>? enabledCollectors,
+        CancellationToken ct)
+    {
         var ordered = OrderCandidates(machine.Address, candidates, perHostOverrides);
         if (ordered.Count == 0)
         {
@@ -66,9 +82,13 @@ public sealed class InventoryRunner
         CredentialCandidate? winner = null;
         string? lastAuthDetail = null;
 
-        foreach (var candidate in ordered)
+        for (int i = 0; i < ordered.Count; i++)
         {
+            var candidate = ordered[i];
             ct.ThrowIfCancellationRequested();
+            machine.CurrentActivity = ordered.Count == 1
+                ? $"Connecting ({candidate.Label})…"
+                : $"Connecting ({candidate.Label}, {i + 1}/{ordered.Count})…";
             try
             {
                 session = await _sessions.ConnectAsync(machine.Address, candidate.Credential, ct).ConfigureAwait(false);
@@ -107,6 +127,7 @@ public sealed class InventoryRunner
                 if (enabledCollectors is not null && !enabledCollectors.Contains(collector.Name)) continue;
                 ct.ThrowIfCancellationRequested();
 
+                machine.CurrentActivity = $"Collecting {collector.Name}…";
                 machine.SetCollector(collector.Name, CollectorStatus.NotRun);
                 try
                 {

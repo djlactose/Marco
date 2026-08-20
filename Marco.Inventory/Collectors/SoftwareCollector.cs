@@ -40,9 +40,7 @@ public sealed class SoftwareCollector : IInventoryCollector
                 raw.Add(new SoftwareParser.RawEntry(key, SoftwareSource.PerUser));
         }
 
-        var parsed = SoftwareParser.Parse(raw, reg.SupportsLastWriteTime);
-        machine.Software.Clear();
-        machine.Software.AddRange(parsed);
+        machine.Software = SoftwareParser.Parse(raw, reg.SupportsLastWriteTime).ToList();
         machine.RefreshCounts();
         return Task.CompletedTask;
     }

@@ -58,13 +58,8 @@ public sealed class ScanController
                 Interlocked.Exchange(ref lastReportTicks, now);
             }
             int done = Volatile.Read(ref completed);
-            TimeSpan? eta = null;
-            if (totalHint is > 0 && done > 0)
-            {
-                double perItem = sw.Elapsed.TotalSeconds / done;
-                int remaining = Math.Max(0, totalHint.Value - done);
-                eta = TimeSpan.FromSeconds(perItem * remaining);
-            }
+            // Elapsed in the report stays wall-clock; only the rate excludes paused time.
+            TimeSpan? eta = ScanEta.Estimate(done, totalHint, sw.Elapsed - (pause?.PausedTime ?? TimeSpan.Zero));
             progress.Report(new ScanProgress(
                 ScanPhase.Discovery, done, totalHint,
                 Volatile.Read(ref alive), Volatile.Read(ref unreachable),

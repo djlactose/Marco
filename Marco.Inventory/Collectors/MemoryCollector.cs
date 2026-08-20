@@ -14,13 +14,13 @@ public sealed class MemoryCollector : IInventoryCollector
         var modules = await session.QueryAsync(WmiQueryHelpers.CimV2,
             "SELECT Capacity, Speed, Manufacturer, PartNumber, DeviceLocator FROM Win32_PhysicalMemory", ct);
 
-        machine.MemoryModules.Clear();
+        var list = new List<MemoryModule>();
         long total = 0;
         foreach (var m in modules)
         {
             var cap = (long)(m.GetULong("Capacity") ?? 0);
             total += cap;
-            machine.MemoryModules.Add(new MemoryModule
+            list.Add(new MemoryModule
             {
                 CapacityBytes = cap,
                 SpeedMhz = m.GetInt("Speed") ?? 0,
@@ -29,14 +29,15 @@ public sealed class MemoryCollector : IInventoryCollector
                 SlotLabel = m.GetString("DeviceLocator"),
             });
         }
+        machine.MemoryModules = list;
         machine.TotalMemoryBytes = total;
-        machine.MemorySlotsUsed = machine.MemoryModules.Count;
+        machine.MemorySlotsUsed = list.Count;
 
         // Total physical slots from the memory array(s).
         var arrays = await session.QueryTolerantAsync(
             "SELECT MemoryDevices FROM Win32_PhysicalMemoryArray", ct);
         int slots = 0;
         foreach (var a in arrays) slots += a.GetInt("MemoryDevices") ?? 0;
-        machine.MemorySlotsTotal = slots > 0 ? slots : machine.MemoryModules.Count;
+        machine.MemorySlotsTotal = slots > 0 ? slots : list.Count;
     }
 }

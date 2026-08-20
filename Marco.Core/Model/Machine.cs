@@ -60,36 +60,66 @@ public sealed class Machine : ObservableBase
     public string? StatusDetail { get => _statusDetail; set => Set(ref _statusDetail, value); }
     public int? IcmpTtl { get => _icmpTtl; set => Set(ref _icmpTtl, value); }
 
+    private string? _currentActivity;
+    /// <summary>What inventory is doing to this host right now ("Connecting (lab-admin, 2/3)…",
+    /// "Collecting Software…"); null when idle. Set from worker threads — WPF marshals scalar INPC the same
+    /// way it already does for Status/StatusDetail. Transient: never serialized (no MachineDto field).</summary>
+    public string? CurrentActivity { get => _currentActivity; set => Set(ref _currentActivity, value); }
+
     /// <summary>Open TCP ports observed during discovery (feeds classification; not shown directly).</summary>
     public HashSet<int> OpenPorts { get; } = new();
 
     // --- Inventory groups (non-null so nested bindings always resolve) ---
+    // The lists below are settable: collectors build a local list and ASSIGN it on completion (never
+    // Clear()+Add on the shared instance). The reference change is what makes bound ItemsControls
+    // regenerate on NotifyInventoryUpdated — a re-read of the same reference is a no-op to WPF — and it
+    // removes the mutate-while-the-UI-enumerates race.
     public SystemInfo System { get; } = new();
     public OsInfo Os { get; } = new();
 
-    public List<CpuInfo> Cpus { get; } = new();
-    public List<MemoryModule> MemoryModules { get; } = new();
-    public List<DiskInfo> Disks { get; } = new();
-    public List<VolumeInfo> Volumes { get; } = new();
-    public List<AdapterInfo> Adapters { get; } = new();
-    public List<SoftwareEntry> Software { get; } = new();
-    public List<HotfixEntry> Hotfixes { get; } = new();
-    public List<AntivirusEntry> Antivirus { get; } = new();
-    public List<PrinterEntry> Printers { get; } = new();
-    public List<UsbDeviceEntry> UsbDevices { get; } = new();
-    public List<UsbStorageHistoryEntry> UsbStorageHistory { get; } = new();
+    private List<CpuInfo> _cpus = new();
+    public List<CpuInfo> Cpus { get => _cpus; set => _cpus = value ?? new(); }
+    private List<MemoryModule> _memoryModules = new();
+    public List<MemoryModule> MemoryModules { get => _memoryModules; set => _memoryModules = value ?? new(); }
+    private List<DiskInfo> _disks = new();
+    public List<DiskInfo> Disks { get => _disks; set => _disks = value ?? new(); }
+    private List<VolumeInfo> _volumes = new();
+    public List<VolumeInfo> Volumes { get => _volumes; set => _volumes = value ?? new(); }
+    private List<AdapterInfo> _adapters = new();
+    public List<AdapterInfo> Adapters { get => _adapters; set => _adapters = value ?? new(); }
+    private List<SoftwareEntry> _software = new();
+    public List<SoftwareEntry> Software { get => _software; set => _software = value ?? new(); }
+    private List<HotfixEntry> _hotfixes = new();
+    public List<HotfixEntry> Hotfixes { get => _hotfixes; set => _hotfixes = value ?? new(); }
+    private List<AntivirusEntry> _antivirus = new();
+    public List<AntivirusEntry> Antivirus { get => _antivirus; set => _antivirus = value ?? new(); }
+    private List<PrinterEntry> _printers = new();
+    public List<PrinterEntry> Printers { get => _printers; set => _printers = value ?? new(); }
+    private List<UsbDeviceEntry> _usbDevices = new();
+    public List<UsbDeviceEntry> UsbDevices { get => _usbDevices; set => _usbDevices = value ?? new(); }
+    private List<UsbStorageHistoryEntry> _usbStorageHistory = new();
+    public List<UsbStorageHistoryEntry> UsbStorageHistory { get => _usbStorageHistory; set => _usbStorageHistory = value ?? new(); }
 
     // Users / services / peripherals (Phase 3 collectors)
-    public List<LocalAccountEntry> LocalAccounts { get; } = new();
+    private List<LocalAccountEntry> _localAccounts = new();
+    public List<LocalAccountEntry> LocalAccounts { get => _localAccounts; set => _localAccounts = value ?? new(); }
     /// <summary>Members of the local Administrators group as "DOMAIN\name" (groups suffixed "(group)").</summary>
-    public List<string> LocalAdministrators { get; } = new();
-    public List<UserProfileEntry> UserProfiles { get; } = new();
-    public List<LogonSessionEntry> LogonSessions { get; } = new();
-    public List<ServiceEntry> Services { get; } = new();
-    public List<StartupEntry> StartupItems { get; } = new();
-    public List<ScheduledTaskEntry> ScheduledTasks { get; } = new();
-    public List<MonitorEntry> Monitors { get; } = new();
-    public List<GpuInfo> Gpus { get; } = new();
+    private List<string> _localAdministrators = new();
+    public List<string> LocalAdministrators { get => _localAdministrators; set => _localAdministrators = value ?? new(); }
+    private List<UserProfileEntry> _userProfiles = new();
+    public List<UserProfileEntry> UserProfiles { get => _userProfiles; set => _userProfiles = value ?? new(); }
+    private List<LogonSessionEntry> _logonSessions = new();
+    public List<LogonSessionEntry> LogonSessions { get => _logonSessions; set => _logonSessions = value ?? new(); }
+    private List<ServiceEntry> _services = new();
+    public List<ServiceEntry> Services { get => _services; set => _services = value ?? new(); }
+    private List<StartupEntry> _startupItems = new();
+    public List<StartupEntry> StartupItems { get => _startupItems; set => _startupItems = value ?? new(); }
+    private List<ScheduledTaskEntry> _scheduledTasks = new();
+    public List<ScheduledTaskEntry> ScheduledTasks { get => _scheduledTasks; set => _scheduledTasks = value ?? new(); }
+    private List<MonitorEntry> _monitors = new();
+    public List<MonitorEntry> Monitors { get => _monitors; set => _monitors = value ?? new(); }
+    private List<GpuInfo> _gpus = new();
+    public List<GpuInfo> Gpus { get => _gpus; set => _gpus = value ?? new(); }
 
     // Scalar groups. Settable so a reopened scan can hand its deserialized object straight over; the detail
     // pane re-reads them through NotifyInventoryUpdated like System/Os.

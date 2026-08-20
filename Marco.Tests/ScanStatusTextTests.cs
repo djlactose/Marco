@@ -24,23 +24,23 @@ public class ScanStatusTextTests
             ScanStatusText.Compose(P(ScanPhase.Discovery, 120, 508, alive: 40), paused: true, cancelling: false));
 
     [Fact]
-    public void Discovery_Cancelling_WithInFlight_UsesPlural()
-        => Assert.Equal("Cancelling… finishing 3 in-flight probes.",
+    public void Discovery_Stopping_WithInFlight_UsesPlural()
+        => Assert.Equal("Stopping… finishing 3 in-flight probes.",
             ScanStatusText.Compose(P(ScanPhase.Discovery, 120, 508, inFlight: 3), paused: false, cancelling: true));
 
     [Fact]
-    public void Discovery_Cancelling_OneInFlight_IsSingular()
-        => Assert.Equal("Cancelling… finishing 1 in-flight probe.",
+    public void Discovery_Stopping_OneInFlight_IsSingular()
+        => Assert.Equal("Stopping… finishing 1 in-flight probe.",
             ScanStatusText.Compose(P(ScanPhase.Discovery, 120, 508, inFlight: 1), paused: false, cancelling: true));
 
     [Fact]
-    public void Discovery_Cancelling_Settled()
-        => Assert.Equal("Cancelling…",
+    public void Discovery_Stopping_Settled()
+        => Assert.Equal("Stopping…",
             ScanStatusText.Compose(P(ScanPhase.Discovery, 120, 508), paused: false, cancelling: true));
 
     [Fact]
-    public void Cancelling_WinsOverPaused()
-        => Assert.StartsWith("Cancelling",
+    public void Stopping_WinsOverPaused()
+        => Assert.StartsWith("Stopping",
             ScanStatusText.Compose(P(ScanPhase.Discovery, 1, 2, inFlight: 1), paused: true, cancelling: true));
 
     [Fact]
@@ -52,11 +52,31 @@ public class ScanStatusTextTests
             ScanStatusText.Compose(P(ScanPhase.Inventory, 3, 10, inFlight: 4), true, false));
         Assert.Equal("Inventory paused at 3/10",
             ScanStatusText.Compose(P(ScanPhase.Inventory, 3, 10), true, false));
-        Assert.Equal("Cancelling inventory… finishing 1 host.",
+        Assert.Equal("Stopping inventory… 1 host finishing in the background.",
             ScanStatusText.Compose(P(ScanPhase.Inventory, 3, 10, inFlight: 1), false, true));
-        Assert.Equal("Cancelling inventory…",
+        Assert.Equal("Stopping inventory…",
             ScanStatusText.Compose(P(ScanPhase.Inventory, 3, 10), false, true));
     }
+
+    [Fact]
+    public void Inventory_Running_AppendsActivity()
+        => Assert.Equal("Inventorying… 3/10 — pc-01: Collecting Software…",
+            ScanStatusText.Compose(P(ScanPhase.Inventory, 3, 10, inFlight: 4), false, false,
+                activity: "pc-01: Collecting Software…"));
+
+    [Fact]
+    public void Inventory_Activity_IgnoredWhilePausedOrStopping()
+    {
+        Assert.Equal("Inventory paused at 3/10",
+            ScanStatusText.Compose(P(ScanPhase.Inventory, 3, 10), true, false, activity: "pc-01: x"));
+        Assert.Equal("Stopping inventory…",
+            ScanStatusText.Compose(P(ScanPhase.Inventory, 3, 10), false, true, activity: "pc-01: x"));
+    }
+
+    [Fact]
+    public void Discovery_Activity_Ignored()
+        => Assert.Equal("Scanning… 5/10  ·  2 alive",
+            ScanStatusText.Compose(P(ScanPhase.Discovery, 5, 10, alive: 2), false, false, activity: "pc-01: x"));
 
     [Fact]
     public void UnknownTotal_ShowsQuestionMark()

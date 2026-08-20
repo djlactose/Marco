@@ -20,7 +20,7 @@ public sealed class StorageCollector : IInventoryCollector
         var session = context.Wmi;
         var disks = await session.QueryAsync(WmiQueryHelpers.CimV2,
             "SELECT Index, Model, Size, MediaType, SerialNumber, Status, InterfaceType, FirmwareRevision, Partitions, PNPDeviceID FROM Win32_DiskDrive", ct);
-        machine.Disks.Clear();
+        var diskList = new List<DiskInfo>();
         var byIndex = new Dictionary<int, DiskInfo>();
         var pnpByDisk = new Dictionary<DiskInfo, string>();
         foreach (var d in disks)
@@ -36,18 +36,21 @@ public sealed class StorageCollector : IInventoryCollector
                 Firmware = d.GetString("FirmwareRevision")?.Trim(),
                 Partitions = d.GetInt("Partitions"),
             };
-            machine.Disks.Add(info);
+            diskList.Add(info);
             if (d.GetInt("Index") is { } idx) byIndex[idx] = info;
             if (d.GetString("PNPDeviceID") is { } pnp) pnpByDisk[info] = pnp;
         }
+        // Assigned before enrichment: the later sections only mutate the DiskInfo objects, and the UI
+        // won't look until NotifyInventoryUpdated fires after the whole host completes.
+        machine.Disks = diskList;
 
         // Logical volumes: DriveType 3 = local fixed disk.
         var vols = await session.QueryAsync(WmiQueryHelpers.CimV2,
             "SELECT DeviceID, FileSystem, Size, FreeSpace, VolumeName FROM Win32_LogicalDisk WHERE DriveType = 3", ct);
-        machine.Volumes.Clear();
+        var volumeList = new List<VolumeInfo>();
         foreach (var v in vols)
         {
-            machine.Volumes.Add(new VolumeInfo
+            volumeList.Add(new VolumeInfo
             {
                 Letter = v.GetString("DeviceID"),
                 FileSystem = v.GetString("FileSystem"),
@@ -56,6 +59,7 @@ public sealed class StorageCollector : IInventoryCollector
                 Label = v.GetString("VolumeName")?.Trim(),
             });
         }
+        machine.Volumes = volumeList;
         machine.RefreshCounts();
 
         // --- optional enrichment from here on ---

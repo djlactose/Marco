@@ -202,11 +202,17 @@ public sealed class SystemManagementWmiSessionFactory : IWmiSessionFactory
     public SystemManagementWmiSessionFactory(int timeoutSeconds = 20) => _timeoutSeconds = timeoutSeconds;
 
     public Task<IWmiSession> ConnectAsync(string host, WmiCredential? credential, CancellationToken ct)
-        => Task.Run<IWmiSession>(() =>
-        {
-            ct.ThrowIfCancellationRequested();
-            var session = new SystemManagementWmiSession(host, credential, _timeoutSeconds);
-            session.Connect(); // validate auth/reachability up front
-            return session;
-        }, ct);
+        // The blocking Connect() cannot be interrupted once started, but nothing needs to sit waiting for
+        // it either: on cancellation the caller unblocks immediately and a connect that succeeds afterwards
+        // is disposed by the abandonment callback, leaking nothing.
+        => Marco.Core.Threading.AbandonableTask.AwaitOrAbandonAsync<IWmiSession>(
+            Task.Run<IWmiSession>(() =>
+            {
+                ct.ThrowIfCancellationRequested();
+                var session = new SystemManagementWmiSession(host, credential, _timeoutSeconds);
+                session.Connect(); // validate auth/reachability up front
+                return session;
+            }, ct),
+            ct,
+            onAbandonedResult: s => s.Dispose());
 }

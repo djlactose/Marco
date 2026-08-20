@@ -20,14 +20,14 @@ public sealed class UsbHistoryCollector : IInventoryCollector
     public Task CollectAsync(InventoryContext context, Machine machine, CancellationToken ct)
     {
         var reg = context.Registry;
-        machine.UsbStorageHistory.Clear();
+        var list = new List<UsbStorageHistoryEntry>();
         foreach (var deviceKey in reg.GetSubKeyNames(RegistryRoot.LocalMachine, UsbStorKey))
         {
             ct.ThrowIfCancellationRequested();
             var (vendor, product) = ParseDeviceKey(deviceKey);
             foreach (var unit in reg.EnumerateSubkeys(RegistryRoot.LocalMachine, $"{UsbStorKey}\\{deviceKey}", new[] { "FriendlyName", "DeviceDesc" }))
             {
-                machine.UsbStorageHistory.Add(new UsbStorageHistoryEntry
+                list.Add(new UsbStorageHistoryEntry
                 {
                     FriendlyName = RegistryValues.AsString(RegistryValues.Get(unit.Values, "FriendlyName"))
                                    ?? StripDeviceDesc(RegistryValues.AsString(RegistryValues.Get(unit.Values, "DeviceDesc")))
@@ -38,7 +38,8 @@ public sealed class UsbHistoryCollector : IInventoryCollector
                 });
             }
         }
-        machine.UsbStorageHistory.Sort((a, b) => string.Compare(a.FriendlyName, b.FriendlyName, StringComparison.OrdinalIgnoreCase));
+        list.Sort((a, b) => string.Compare(a.FriendlyName, b.FriendlyName, StringComparison.OrdinalIgnoreCase));
+        machine.UsbStorageHistory = list;
         return Task.CompletedTask;
     }
 

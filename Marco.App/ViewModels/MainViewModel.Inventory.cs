@@ -155,8 +155,9 @@ public partial class MainViewModel
         catch (Exception ex) { _runLog.Note($"Credential save failed: {ex.Message}"); }
     }
 
-    // Mutating credentials mid-run could dispose a SecureString a connect is actively using.
-    private bool CanMutateCredentials() => !IsScanning;
+    // Mutating credentials mid-run could dispose a SecureString a connect is actively using — and an abandoned
+    // Stop drain keeps connects in flight after IsScanning drops, so gate on the whole run.
+    private bool CanMutateCredentials() => !IsRunning;
 
     partial void OnIsScanningChanged(bool value)
     {
@@ -174,13 +175,13 @@ public partial class MainViewModel
 
     // --- Inventory ---
 
-    private bool CanInventory() => !IsScanning && Machines.Count > 0;
+    private bool CanInventory() => !IsRunning && Machines.Count > 0;
 
     [RelayCommand(CanExecute = nameof(CanInventorySelected))]
     private Task InventorySelectedAsync()
         => SelectedMachine is { } m ? RunInventoryAsync(new[] { m }, force: true) : Task.CompletedTask;
 
-    private bool CanInventorySelected() => !IsScanning && SelectedMachine is not null;
+    private bool CanInventorySelected() => !IsRunning && SelectedMachine is not null;
 
     [RelayCommand(CanExecute = nameof(CanInventory))]
     private Task InventoryAliveAsync()
@@ -188,27 +189,49 @@ public partial class MainViewModel
 
     /// <param name="force">Attempt every target even when its device type has no inventory support
     /// (explicit "Inventory selected"); bulk runs skip printers and network gear.</param>
+    /// <summary>The hosts of the inventory run currently on screen — read (UI thread) by
+    /// <see cref="ComposeActivitySummary"/> and the 1 Hz status timer. Null outside an inventory run.</summary>
+    private IReadOnlyList<Machine>? _activeInventoryTargets;
+
+    /// <summary>"pc-01: Collecting Software…, pc-02: Connecting (lab)… (+3 more)" — capped at two hosts so the
+    /// status line stays one line. Null outside inventory (discovery has no per-host activity).</summary>
+    private string? ComposeActivitySummary()
+    {
+        if (_activeInventoryTargets is not { } targets) return null;
+        var busy = targets.Where(m => m.CurrentActivity is not null).ToList();
+        if (busy.Count == 0) return null;
+        var head = string.Join(", ", busy.Take(2).Select(m => $"{m.DisplayName}: {m.CurrentActivity}"));
+        return busy.Count > 2 ? $"{head} (+{busy.Count - 2} more)" : head;
+    }
+
     private async Task RunInventoryAsync(IReadOnlyList<Machine> targets, bool force = false)
     {
         if (targets.Count == 0) { StatusLine = "No hosts to inventory."; return; }
 
+        int gen = ++_runGeneration;
         _cts = new CancellationTokenSource();
+        var cts = _cts;   // captured: when a Stop abandons the drain, the drain continuation owns disposal
         _pause = new PauseController();
         var pause = _pause;
-        IProgress<ScanProgress> progress = new Progress<ScanProgress>(OnProgress);
+        // Gen-gated: after a Stop abandons this run, its late reports must not touch the UI.
+        IProgress<ScanProgress> progress = new Progress<ScanProgress>(p => { if (_runGeneration == gen) OnProgress(p); });
 
         int done = 0, authed = 0, skipped = 0, inFlight = 0;
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        // Seed the snapshot so a Pause/Cancel before the first host reports still composes inventory wording.
+        // Seed the snapshot so a Pause/Stop before the first host reports still composes inventory wording.
         _lastProgress = new ScanProgress(ScanPhase.Inventory, 0, targets.Count, 0, 0, TimeSpan.Zero, null);
+        _activeInventoryTargets = targets;
+        bool abandoned = false;
 
         try
         {
+            IsRunning = true; // idempotent when chained from StartScanAsync
             IsScanning = true;
             IsPaused = false;
             IsCancelling = false;
             ProgressIndeterminate = false;
             ProgressFraction = 0;
+            _inventoryStatusTimer.Start();
 
             var candidates = ResolveCandidates();
             // Snapshot the checklist once per run so a toggle mid-run can't give two hosts different collector sets.
@@ -218,10 +241,10 @@ public partial class MainViewModel
             var options = new System.Threading.Tasks.ParallelOptions
             {
                 MaxDegreeOfParallelism = BuildSettings().EffectiveInventoryConcurrency,
-                CancellationToken = _cts.Token,
+                CancellationToken = cts.Token,
             };
 
-            await Task.Run(() => Parallel.ForEachAsync(targets, options, async (m, token) =>
+            var run = Task.Run(() => Parallel.ForEachAsync(targets, options, async (m, token) =>
             {
                 // Pause parks new hosts here; hosts already mid-inventory finish (a WMI/SSH session can't be
                 // suspended half-way), which is what the "N hosts finishing" status counts.
@@ -229,8 +252,10 @@ public partial class MainViewModel
                 token.ThrowIfCancellationRequested();
 
                 // Report on entry as well as on completion so "N hosts finishing" is right from the first host.
-                progress.Report(new ScanProgress(ScanPhase.Inventory, Volatile.Read(ref done), targets.Count, 0, 0,
-                    sw.Elapsed, null, Interlocked.Increment(ref inFlight)));
+                int entryDone = Volatile.Read(ref done);
+                progress.Report(new ScanProgress(ScanPhase.Inventory, entryDone, targets.Count, 0, 0,
+                    sw.Elapsed, ScanEta.Estimate(entryDone, targets.Count, sw.Elapsed - pause.PausedTime),
+                    Interlocked.Increment(ref inFlight)));
                 InventoryOutcome outcome;
                 try
                 {
@@ -274,21 +299,47 @@ public partial class MainViewModel
                 _runLog.InventoryAttempt(m.Address, outcome.Authenticated, outcome.Status.ToString(), outcome.CredentialLabel);
 
                 // Raise collection change notifications on the UI thread so the detail view re-renders.
-                Application.Current.Dispatcher.Invoke(() => m.NotifyInventoryUpdated());
+                // Async, and null-tolerant: a straggler from an abandoned Stop drain must never block on
+                // (or throw from) a dispatcher that may be gone at shutdown.
+                Application.Current?.Dispatcher.InvokeAsync(m.NotifyInventoryUpdated);
 
                 int completed = Interlocked.Increment(ref done);
                 if (outcome.Authenticated) Interlocked.Increment(ref authed);
                 progress.Report(new ScanProgress(ScanPhase.Inventory, completed, targets.Count, 0, 0,
-                    sw.Elapsed, null, Volatile.Read(ref inFlight)));
+                    sw.Elapsed, ScanEta.Estimate(completed, targets.Count, sw.Elapsed - pause.PausedTime),
+                    Volatile.Read(ref inFlight)));
             }));
+
+            try
+            {
+                await run.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException) when (!run.IsCompleted)
+            {
+                // Stop must hand the UI back within ~a second even while WMI/SSH work is mid-flight, so stop
+                // WAITING for the drain instead of trying to interrupt it. The detached continuation observes
+                // the outcome and owns the CTS; the bumped generation makes every late progress report from
+                // this run inert. Stragglers only touch Machine rows (their INPC is harmless, even after a
+                // Clear detaches them), the thread-safe run log, and captured locals.
+                abandoned = true;
+                _runGeneration++;
+                int abandonedInFlight = Volatile.Read(ref inFlight);
+                _ = run.ContinueWith(t =>
+                {
+                    _ = t.Exception; // observe; per-host failures are already recorded on the rows
+                    cts.Dispose();
+                    _runLog.Note($"Stopped inventory; {abandonedInFlight} in-flight host(s) drained in the background.");
+                }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                throw;
+            }
 
             StatusLine = $"Inventory complete. {authed}/{targets.Count} authenticated in {sw.Elapsed.TotalSeconds:0.0}s."
                 + (skipped > 0 ? $" Skipped {skipped} printer/network device(s)." : "");
         }
         catch (OperationCanceledException)
         {
-            StatusLine = $"Inventory cancelled. {done}/{targets.Count} done.";
-            _runLog.Note($"Inventory cancelled. {done}/{targets.Count} done.");
+            StatusLine = $"Inventory stopped. {done}/{targets.Count} done.";
+            _runLog.Note($"Inventory stopped. {done}/{targets.Count} done.");
         }
         catch (Exception ex)
         {
@@ -297,13 +348,18 @@ public partial class MainViewModel
         }
         finally
         {
+            _inventoryStatusTimer.Stop();
+            _activeInventoryTargets = null;
             IsPaused = false;
             IsCancelling = false;
-            _pause = null;
-            _cts?.Dispose();
-            _cts = null;
+            // An abandoned drain still holds the captured pause/cts; only clear the VM's references when they
+            // are still ours (a new run may have replaced them by the time a straggler finishes).
+            if (ReferenceEquals(_pause, pause)) _pause = null;
+            if (!abandoned) cts.Dispose();
+            if (ReferenceEquals(_cts, cts)) _cts = null;
             ProgressFraction = 0;
             IsScanning = false;
+            IsRunning = false; // ends the run face; when chained, StartScanAsync's finally re-clears harmlessly
         }
     }
 
@@ -337,6 +393,7 @@ public partial class MainViewModel
         try
         {
             var doc = new JsonExporter().Load(dialog.FileName);
+            CloseDetailWindows(); // their machines are about to leave the grid
             Machines.Clear();
             SelectedMachine = null;
             var ranges = doc.Metadata.RangesScanned ?? Array.Empty<string>();
@@ -362,7 +419,7 @@ public partial class MainViewModel
         }
     }
 
-    private bool CanOpenScan() => !IsScanning;
+    private bool CanOpenScan() => !IsRunning;
 
     [RelayCommand]
     private void ExportJson()
