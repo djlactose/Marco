@@ -58,6 +58,9 @@ public sealed class LinuxInventoryRunner
         ISet<string>? enabledCollectors,
         CancellationToken ct)
     {
+        machine.ConnectFailure = ConnectFailure.None;
+        machine.ConnectFailureLocalAccount = false;
+
         var ordered = OrderCandidates(machine.Address, candidates, perHostOverrides)
             .Where(c => !c.Credential.UseCurrentToken && !string.IsNullOrEmpty(c.Credential.Username))
             .ToList();
@@ -65,6 +68,7 @@ public sealed class LinuxInventoryRunner
         {
             machine.Status = MachineStatus.AuthFailed;
             machine.StatusDetail = "No username/password credentials for SSH (a current-session token can't be used).";
+            machine.ConnectFailure = ConnectFailure.NoCredentials;
             return new InventoryOutcome(false, null, machine.Status, machine.StatusDetail);
         }
 
@@ -101,6 +105,7 @@ public sealed class LinuxInventoryRunner
             {
                 machine.Status = MachineStatus.Unreachable;
                 machine.StatusDetail = $"SSH: {ex.Message}";
+                machine.ConnectFailure = ConnectFailure.SshUnreachable;
                 return new InventoryOutcome(false, null, machine.Status, machine.StatusDetail);
             }
         }
@@ -109,6 +114,7 @@ public sealed class LinuxInventoryRunner
         {
             machine.Status = MachineStatus.AuthFailed;
             machine.StatusDetail = lastAuthDetail ?? "SSH authentication failed for all credential sets.";
+            machine.ConnectFailure = ConnectFailure.SshAuthFailed;
             return new InventoryOutcome(false, null, machine.Status, machine.StatusDetail);
         }
 

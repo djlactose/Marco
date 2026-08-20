@@ -20,6 +20,31 @@
                    FontSize="11" Margin="0,2,0,0"
                    Visibility="{Binding CurrentActivity, Converter={StaticResource NotEmptyToVis}}" />
 
+        <!-- Prerequisite doctor: why inventory failed, with the copy-paste fix. Collapsed while the diagnosis
+             title is empty (Cause None); Machine.Diagnosis recomputes on the row's RaiseAll. -->
+        <!-- FallbackValue on every visibility: a null DataContext (no row selected) must collapse the panel,
+             not show it — a failed binding otherwise leaves Visibility at its Visible default. -->
+        <Border Background="#FDF3F2" BorderBrush="#E4B4AF" BorderThickness="1" CornerRadius="3"
+                Padding="8,6" Margin="0,6,0,0"
+                Visibility="{Binding Diagnosis.Title, Converter={StaticResource NotEmptyToVis}, FallbackValue=Collapsed}">
+          <StackPanel>
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="Why this failed:" FontWeight="SemiBold" FontSize="11" Foreground="#8B1A12" />
+              <TextBlock Text="{Binding Diagnosis.Title}" FontWeight="SemiBold" FontSize="11" Margin="4,0,0,0" />
+              <TextBlock Text="(likely)" FontSize="11" Foreground="{StaticResource MutedBrush}" Margin="4,0,0,0"
+                         Visibility="{Binding Diagnosis.Confident, Converter={StaticResource InverseBoolToVis}, FallbackValue=Collapsed}" />
+            </StackPanel>
+            <TextBlock Text="{Binding Diagnosis.Explanation}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0" />
+            <TextBox Text="{Binding Diagnosis.FixScript, Mode=OneWay}" IsReadOnly="True" IsReadOnlyCaretVisible="False"
+                     FontFamily="Consolas" FontSize="11" TextWrapping="Wrap" Background="White"
+                     BorderBrush="{StaticResource BorderBrush}" Margin="0,4,0,0"
+                     Visibility="{Binding Diagnosis.FixScript, Converter={StaticResource NotEmptyToVis}, FallbackValue=Collapsed}" />
+            <Button Content="Copy fix" HorizontalAlignment="Left" Margin="0,4,0,0" Padding="8,2" MinWidth="0"
+                    Command="{StaticResource CopyText}" CommandParameter="{Binding Diagnosis.FixScript}"
+                    Visibility="{Binding Diagnosis.FixScript, Converter={StaticResource NotEmptyToVis}, FallbackValue=Collapsed}" />
+          </StackPanel>
+        </Border>
+
         <UniformGrid Columns="2" Margin="0,10,0,0">
           <StackPanel Margin="0,0,20,0">
             <TextBlock Text="Identity" Style="{StaticResource SectionHeader}" Margin="0,0,0,4" />

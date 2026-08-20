@@ -88,6 +88,9 @@
         <TextBlock Grid.Column="0" Text="{Binding StatusLine}" VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+          <Button Content="Doctor…" Command="{Binding OpenDoctorCommand}" Padding="8,2" MinWidth="0" Margin="0,0,12,0"
+                  Visibility="{Binding HasDoctorFindings, Converter={StaticResource BoolToVis}}"
+                  ToolTip="Hosts that failed inventory, grouped by diagnosed cause, with copy-paste fixes" />
           <TextBlock Text="{Binding AliveCount, StringFormat='{}{0} alive'}" Foreground="SeaGreen" Margin="0,0,10,0" />
           <TextBlock Text="{Binding UnreachableCount, StringFormat='{}{0} down'}" Foreground="Gray" Margin="0,0,10,0" />
           <TextBlock Text="{Binding TotalCount, StringFormat='of {0}'}" Foreground="{StaticResource MutedBrush}" Margin="0,0,10,0" />

@@ -72,7 +72,9 @@ public sealed record MachineDto(
     IReadOnlyList<MonitorEntry>? Monitors = null,
     IReadOnlyList<GpuInfo>? Gpus = null,
     BatteryInfo? Battery = null,
-    int? ThermalTempC = null)
+    int? ThermalTempC = null,
+    ConnectFailure? ConnectFailure = null,
+    bool? ConnectFailureLocalAccount = null)
 {
     public static MachineDto From(Machine m) => new(
         m.Address, m.Name, m.Fqdn, m.DeviceType, m.IsVirtual, m.Vendor,
@@ -89,7 +91,9 @@ public sealed record MachineDto(
         m.Updates, m.Security,
         m.LocalAccounts.ToList(), m.LocalAdministrators.ToList(), m.UserProfiles.ToList(), m.LogonSessions.ToList(),
         m.Services.ToList(), m.StartupItems.ToList(), m.ScheduledTasks.ToList(),
-        m.Monitors.ToList(), m.Gpus.ToList(), m.Battery, m.ThermalTempC);
+        m.Monitors.ToList(), m.Gpus.ToList(), m.Battery, m.ThermalTempC,
+        m.ConnectFailure == Marco.Core.Model.ConnectFailure.None ? null : m.ConnectFailure,
+        m.ConnectFailureLocalAccount ? true : null);
 
     public Machine ToMachine()
     {
@@ -127,6 +131,8 @@ public sealed record MachineDto(
         if (ScheduledTasks is not null) m.ScheduledTasks = ScheduledTasks.ToList();
         if (Monitors is not null) m.Monitors = Monitors.ToList();
         if (Gpus is not null) m.Gpus = Gpus.ToList();
+        if (ConnectFailure is { } cf) m.ConnectFailure = cf;
+        if (ConnectFailureLocalAccount is { } la) m.ConnectFailureLocalAccount = la;
         m.RefreshCounts();
         return m;
     }

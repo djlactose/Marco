@@ -70,17 +70,23 @@ public sealed class InventoryRunner
         ISet<string>? enabledCollectors,
         CancellationToken ct)
     {
+        machine.ConnectFailure = ConnectFailure.None;
+        machine.ConnectFailureLocalAccount = false;
+
         var ordered = OrderCandidates(machine.Address, candidates, perHostOverrides);
         if (ordered.Count == 0)
         {
             machine.Status = MachineStatus.AuthFailed;
             machine.StatusDetail = "No credentials configured.";
+            machine.ConnectFailure = ConnectFailure.NoCredentials;
             return new InventoryOutcome(false, null, machine.Status, machine.StatusDetail);
         }
 
         IWmiSession? session = null;
         CredentialCandidate? winner = null;
         string? lastAuthDetail = null;
+        WmiFailureKind lastAuthKind = WmiFailureKind.AuthFailed;
+        CredentialCandidate? lastAuthCandidate = null;
 
         for (int i = 0; i < ordered.Count; i++)
         {
@@ -98,11 +104,15 @@ public sealed class InventoryRunner
             catch (WmiException wex) when (wex.Kind is WmiFailureKind.AuthFailed or WmiFailureKind.AccessDenied)
             {
                 lastAuthDetail = wex.Hint ?? wex.Message; // try the next set; never mutate this one
+                lastAuthKind = wex.Kind;
+                lastAuthCandidate = candidate;
             }
             catch (WmiException wex) when (wex.Kind is WmiFailureKind.Unreachable or WmiFailureKind.Timeout)
             {
                 machine.Status = MachineStatus.Unreachable;
                 machine.StatusDetail = wex.Message;
+                machine.ConnectFailure = wex.Kind == WmiFailureKind.Timeout
+                    ? ConnectFailure.Timeout : ConnectFailure.Unreachable;
                 return new InventoryOutcome(false, null, machine.Status, machine.StatusDetail);
             }
         }
@@ -111,6 +121,10 @@ public sealed class InventoryRunner
         {
             machine.Status = MachineStatus.AuthFailed;
             machine.StatusDetail = lastAuthDetail ?? "All credential sets were rejected.";
+            machine.ConnectFailure = lastAuthKind == WmiFailureKind.AccessDenied
+                ? ConnectFailure.AccessDenied : ConnectFailure.AuthFailed;
+            machine.ConnectFailureLocalAccount = lastAuthCandidate is not null
+                && IsLocalAccount(lastAuthCandidate.Credential, machine);
             return new InventoryOutcome(false, null, machine.Status, machine.StatusDetail);
         }
 
@@ -182,6 +196,18 @@ public sealed class InventoryRunner
     private void Remember(string host, string label)
     {
         lock (_rememberLock) _remembered[host] = label;
+    }
+
+    /// <summary>A local (non-domain) account: empty domain, ".", or the target's own name — the case where UAC
+    /// remote token filtering rejects the connection unless LocalAccountTokenFilterPolicy is set.</summary>
+    private static bool IsLocalAccount(WmiCredential credential, Machine machine)
+    {
+        if (credential.UseCurrentToken) return false;
+        var domain = credential.Domain?.Trim();
+        return string.IsNullOrEmpty(domain)
+            || domain == "."
+            || string.Equals(domain, machine.Name, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(domain, machine.Address, StringComparison.OrdinalIgnoreCase);
     }
 
     private static CollectorStatus MapStatus(WmiFailureKind kind) => kind switch

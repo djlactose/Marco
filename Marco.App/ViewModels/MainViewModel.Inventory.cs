@@ -282,6 +282,7 @@ public partial class MainViewModel
                             m.StatusDetail = isLinux
                                 ? "Not inventoried: no Linux/SSH credentials configured."
                                 : "Not inventoried: no Windows credentials configured.";
+                            m.ConnectFailure = Marco.Core.Model.ConnectFailure.NoCredentials;
                             outcome = new InventoryOutcome(false, null, m.Status, m.StatusDetail);
                         }
                         else
@@ -336,6 +337,7 @@ public partial class MainViewModel
             StatusLine = $"Inventory complete. {authed}/{targets.Count} authenticated in {sw.Elapsed.TotalSeconds:0.0}s."
                 + (skipped > 0 ? $" Skipped {skipped} printer/network device(s)." : "");
             SaveRunToHistory(Marco.Export.History.ScanHistoryPhase.Inventoried);
+            ReportDoctorFindings(targets);
         }
         catch (OperationCanceledException)
         {
@@ -362,6 +364,35 @@ public partial class MainViewModel
             IsScanning = false;
             IsRunning = false; // ends the run face; when chained, StartScanAsync's finally re-clears harmlessly
         }
+    }
+
+    // --- Prerequisite doctor ---
+
+    /// <summary>True when the last inventory run (or a loaded scan) left diagnosable failures — shows the
+    /// status-bar "Doctor…" button.</summary>
+    [CommunityToolkit.Mvvm.ComponentModel.ObservableProperty]
+    private bool _hasDoctorFindings;
+
+    /// <summary>After an inventory run: surface the fleet rollup in the status line + run log, and light up the
+    /// Doctor button. Counts only in the log — no hostnames.</summary>
+    private void ReportDoctorFindings(IReadOnlyList<Machine> targets)
+    {
+        var rollup = Marco.Core.Diagnosis.PrereqDoctor.Rollup(targets);
+        HasDoctorFindings = rollup.Count > 0;
+        if (rollup.Count == 0) return;
+        int affected = rollup.Sum(g => g.Machines.Count);
+        StatusLine += $" {affected} host{(affected == 1 ? "" : "s")} need target fixes — see Doctor.";
+        _runLog.Doctor(rollup.ToDictionary(g => g.Cause.ToString(), g => g.Machines.Count));
+    }
+
+    // No CanExecute: the button is only VISIBLE when HasDoctorFindings, and the empty case is handled below —
+    // a CanExecute gate would need notify plumbing on every Machines change for no user-visible benefit.
+    [RelayCommand]
+    private void OpenDoctor()
+    {
+        var rollup = Marco.Core.Diagnosis.PrereqDoctor.Rollup(Machines);
+        if (rollup.Count == 0) { StatusLine = "No diagnosable inventory failures in the current grid."; return; }
+        new PrereqReportWindow(rollup) { Owner = Application.Current.MainWindow }.Show();
     }
 
     // --- Export ---
@@ -420,11 +451,13 @@ public partial class MainViewModel
             Machines.Add(machine);
         }
 
+        SelectedMachine = Machines.FirstOrDefault(); // a loaded scan should land with a populated detail pane
         AliveCount = Machines.Count(m => m.IsAlive);
         UnreachableCount = Machines.Count - AliveCount;
         TotalCount = doc.Metadata.TotalTargets > 0 ? doc.Metadata.TotalTargets : Machines.Count;
         LastRanges = doc.Metadata.RangesScanned?.ToList() ?? new List<string>();
         ProgressFraction = 0;
+        HasDoctorFindings = Marco.Core.Diagnosis.PrereqDoctor.Rollup(Machines).Count > 0;
         StatusLine = $"Loaded scan from {sourceName} ({doc.Metadata.Timestamp:g}).";
         InventoryAliveCommand.NotifyCanExecuteChanged();
     }

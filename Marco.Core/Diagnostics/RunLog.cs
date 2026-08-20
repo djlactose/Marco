@@ -47,6 +47,10 @@ public sealed class RunLog
     /// sha_mismatch, stage_failed, check_failed, applied, apply_failed, gate_busy, rollback, notify_only, cleanup.</summary>
     public void UpdateEvent(string stage, string detail) => Write("update", new { stage, detail });
 
+    /// <summary>Prerequisite-doctor rollup after an inventory run: cause name → affected host count.
+    /// Counts only — no hostnames, to keep the log small and unrevealing.</summary>
+    public void Doctor(IReadOnlyDictionary<string, int> causeCounts) => Write("doctor", new { causes = causeCounts });
+
     /// <summary>Unhandled exception, from the dispatcher, appdomain, or task scheduler.</summary>
     public void Crash(string source, string detail) => Write("crash", new { source, detail });
 

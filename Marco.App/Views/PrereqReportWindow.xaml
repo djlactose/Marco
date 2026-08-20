@@ -1,0 +1,52 @@
+<Window x:Class="Marco.App.Views.PrereqReportWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Prerequisite doctor — Marco" Height="560" Width="780" WindowStartupLocation="CenterOwner"
+        Background="White">
+  <Grid Margin="12">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <DockPanel Grid.Row="0" Margin="0,0,0,8" LastChildFill="False">
+      <StackPanel DockPanel.Dock="Left">
+        <TextBlock Text="{Binding SummaryText}" FontWeight="SemiBold" FontSize="14" />
+        <TextBlock Text="Fixes are text to run on the TARGETS (elevated, or via GPO/Intune) — Marco never executes them."
+                   Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,2,0,0" />
+      </StackPanel>
+      <Button Content="Copy all as text" DockPanel.Dock="Right" VerticalAlignment="Top" Click="OnCopyAll" />
+    </DockPanel>
+
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+      <ItemsControl ItemsSource="{Binding Groups}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="3"
+                    Padding="10,8" Margin="0,0,0,10" Background="#FCFCFD">
+              <StackPanel>
+                <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding Explanation}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0"
+                           Foreground="{StaticResource MutedBrush}" />
+                <Expander Margin="0,4,0,0" IsExpanded="False" FontSize="11">
+                  <Expander.Header>
+                    <TextBlock Text="{Binding HostsHeader}" FontSize="11" />
+                  </Expander.Header>
+                  <TextBlock Text="{Binding Hosts}" FontSize="11" TextWrapping="Wrap" Margin="16,2,0,0"
+                             FontFamily="Consolas" />
+                </Expander>
+                <TextBox Text="{Binding FixScript, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" FontSize="11"
+                         TextWrapping="Wrap" Background="White" BorderBrush="{StaticResource BorderBrush}"
+                         Margin="0,6,0,0"
+                         Visibility="{Binding FixScript, Converter={StaticResource NotEmptyToVis}}" />
+                <Button Content="Copy fix" HorizontalAlignment="Left" Margin="0,4,0,0" Padding="8,2" MinWidth="0"
+                        Command="{StaticResource CopyText}" CommandParameter="{Binding FixScript}"
+                        Visibility="{Binding FixScript, Converter={StaticResource NotEmptyToVis}}" />
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </Grid>
+</Window>

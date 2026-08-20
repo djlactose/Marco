@@ -69,6 +69,20 @@ public class ScanMetadataReaderTests : IDisposable
     }
 
     [Fact]
+    public void Utf8Bom_IsSkipped()
+    {
+        // PowerShell's utf8 encoding and many editors write a BOM; adoption must still work.
+        var plain = Write("bom-source.json", compress: false);
+        var target = Path.Combine(_dir, "bom.json");
+        var bytes = File.ReadAllBytes(plain);
+        File.WriteAllBytes(target, new byte[] { 0xEF, 0xBB, 0xBF }.Concat(bytes).ToArray());
+
+        var meta = ScanMetadataReader.TryRead(target);
+        Assert.NotNull(meta);
+        Assert.Equal("tester", meta!.Operator);
+    }
+
+    [Fact]
     public void GzipLoad_SniffsMagicBytes_RegardlessOfExtension()
     {
         // A gzipped document renamed to plain .json still opens (Load sniffs, never trusts the name).

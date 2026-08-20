@@ -46,11 +46,8 @@ public partial class CredentialDialog : Window
 
     private bool IsLinux => LinuxModeRadio.IsChecked == true;
 
-    public const string TargetEnablementScript =
-        "# Run elevated on each TARGET (or push via Intune):\r\n" +
-        "reg add HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f\r\n" +
-        "netsh advfirewall firewall set rule group=\"windows management instrumentation (wmi)\" new enable=yes\r\n" +
-        "Set-Service RemoteRegistry -StartupType Automatic; Start-Service RemoteRegistry";
+    // The text lives in Core so the prerequisite doctor cites the same commands.
+    public const string TargetEnablementScript = Marco.Core.Diagnosis.PrereqFixes.TargetEnablement;
 
     private void OnModeChanged(object sender, RoutedEventArgs e) => ApplyMode();
 

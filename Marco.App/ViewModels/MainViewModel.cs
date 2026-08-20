@@ -584,6 +584,7 @@ public partial class MainViewModel : ObservableObject
         SelectedMachine = null;
         LastRanges = Array.Empty<string>();
         _currentRunId = null;
+        HasDoctorFindings = false;
         AliveCount = UnreachableCount = TotalCount = 0;
         ProgressFraction = 0;
         StatusLine = "Cleared.";

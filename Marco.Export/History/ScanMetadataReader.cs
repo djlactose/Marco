@@ -38,6 +38,9 @@ public static class ScanMetadataReader
     private static bool TryParse(ReadOnlySpan<byte> data, out ScanMetadata? meta)
     {
         meta = null;
+        // Utf8JsonReader does not skip a UTF-8 BOM (editors and PowerShell's utf8 encoding add one).
+        if (data.Length >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF)
+            data = data[3..];
         try
         {
             var reader = new Utf8JsonReader(data, isFinalBlock: false, default);

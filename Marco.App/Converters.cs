@@ -100,3 +100,29 @@ public sealed class NotEmptyToVisibilityConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
+
+/// <summary>Visible when false — the "(likely)" hedge next to unconfident doctor verdicts.</summary>
+public sealed class InverseBoolToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object? parameter, CultureInfo culture)
+        => value is false ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>Copies its command parameter to the clipboard — a resource-friendly ICommand so templates in a
+/// plain ResourceDictionary (no code-behind) can offer "Copy fix" buttons.</summary>
+public sealed class CopyTextCommand : System.Windows.Input.ICommand
+{
+    public event EventHandler? CanExecuteChanged { add { } remove { } }
+
+    public bool CanExecute(object? parameter) => parameter is string { Length: > 0 };
+
+    public void Execute(object? parameter)
+    {
+        if (parameter is not string text || text.Length == 0) return;
+        try { Clipboard.SetText(text); }
+        catch { /* clipboard briefly owned by another process — a copy button must never crash the app */ }
+    }
+}

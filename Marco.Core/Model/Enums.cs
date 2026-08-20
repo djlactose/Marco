@@ -45,6 +45,20 @@ public enum CollectorStatus
     Failed,
 }
 
+/// <summary>Why inventory could not open a session to the host — None once one succeeds. Structured evidence
+/// for the prerequisite doctor (Marco.Core.Diagnosis), captured where the runners already catch the failure.</summary>
+public enum ConnectFailure
+{
+    None = 0,
+    NoCredentials,
+    AuthFailed,
+    AccessDenied,
+    Unreachable,
+    Timeout,
+    SshAuthFailed,
+    SshUnreachable,
+}
+
 /// <summary>Where an installed-software entry came from.</summary>
 public enum SoftwareSource
 {

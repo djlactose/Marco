@@ -66,6 +66,15 @@ public sealed class Machine : ObservableBase
     /// way it already does for Status/StatusDetail. Transient: never serialized (no MachineDto field).</summary>
     public string? CurrentActivity { get => _currentActivity; set => Set(ref _currentActivity, value); }
 
+    private ConnectFailure _connectFailure;
+    private bool _connectFailureLocalAccount;
+    /// <summary>Why the last inventory attempt could not open a session (None once one succeeded) — the
+    /// structured evidence the prerequisite doctor turns into a named cause and fix.</summary>
+    public ConnectFailure ConnectFailure { get => _connectFailure; set => Set(ref _connectFailure, value); }
+    /// <summary>True when the failing credential was a local (non-domain) account — the
+    /// LocalAccountTokenFilterPolicy signature the doctor keys on.</summary>
+    public bool ConnectFailureLocalAccount { get => _connectFailureLocalAccount; set => Set(ref _connectFailureLocalAccount, value); }
+
     /// <summary>Open TCP ports observed during discovery (feeds classification; not shown directly).</summary>
     public HashSet<int> OpenPorts { get; } = new();
 
@@ -159,6 +168,10 @@ public sealed class Machine : ObservableBase
     public int HotfixCount { get => _hotfixCount; set => Set(ref _hotfixCount, value); }
     public int LocalAccountCount { get => _localAccountCount; set => Set(ref _localAccountCount, value); }
     public int MonitorCount { get => _monitorCount; set => Set(ref _monitorCount, value); }
+
+    /// <summary>Prerequisite-doctor verdict for this host, computed on read (Cause None = nothing to show).
+    /// Refreshed with the rest of the row by <see cref="NotifyInventoryUpdated"/>'s RaiseAll.</summary>
+    public Marco.Core.Diagnosis.PrereqDiagnosis Diagnosis => Marco.Core.Diagnosis.PrereqDoctor.Diagnose(this);
 
     /// <summary>First MAC, for the grid's single MAC column.</summary>
     public string? PrimaryMac => MacAddresses.Count > 0 ? MacAddresses[0] : null;
