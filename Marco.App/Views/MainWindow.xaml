@@ -131,7 +131,7 @@
                       ToolTip="Add, edit, share (.marcoclient.json) or import client profiles" />
               <Button DockPanel.Dock="Right" Content="💾" Command="{Binding SaveTargetsToClientCommand}"
                       Margin="6,0,0,0" Padding="6,3" MinWidth="0"
-                      ToolTip="Save the current scan settings (targets, discovery options, concurrency, collectors) to the selected client" />
+                      ToolTip="Save the current scan settings to the selected client — or, with no client selected, save them as a new client (prompts for a name). Other changes are remembered automatically." />
               <ComboBox ItemsSource="{Binding ClientChoices}" SelectedItem="{Binding SelectedClientChoice}"
                         DisplayMemberPath="Display" IsEnabled="{Binding ClientSwitchEnabled}"
                         ToolTip="Switching clients loads that client's targets, discovery settings, baseline, history and branding, and clears the grid. '(No client)' is its own saved profile." />

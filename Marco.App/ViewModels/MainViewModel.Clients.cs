@@ -183,15 +183,40 @@ public partial class MainViewModel
         RefreshWakeMissing();
     }
 
-    /// <summary>Commit the current scan settings (targets, discovery options, concurrency, collectors) to the
-    /// active client without switching away.</summary>
+    /// <summary>The 💾 button. With a client active, commit the current scan settings to it (though they already
+    /// auto-persist on switch/exit). With "(No client)" active, prompt for a name and promote the current
+    /// settings into a new client, adopting it as active without disturbing the grid.</summary>
     [RelayCommand]
     private void SaveTargetsToClient()
     {
-        if (ActiveClient is not { } profile) { StatusLine = "Select a client first (the 'No client' settings save automatically)."; return; }
-        SaveSettings();          // persists the active client's scan config + settings.json
-        LoadClients(profile.Id); // refresh the dropdown from disk
-        StatusLine = $"Saved scan settings to {profile.Name}.";
+        if (ActiveClient is { } profile)
+        {
+            SaveSettings();          // persists the active client's scan config + settings.json
+            LoadClients(profile.Id); // refresh the dropdown from disk
+            StatusLine = $"Saved scan settings to {profile.Name}.";
+            return;
+        }
+
+        // "(No client)": turn the current working settings into a named client.
+        var prompt = new TextPromptDialog("New client",
+            "Save the current scan settings (targets, discovery options, concurrency, collectors) as a new client named:")
+        {
+            Owner = Application.Current.MainWindow,
+        };
+        if (prompt.ShowDialog() != true) return;
+        var name = prompt.Value.Trim();
+        if (name.Length == 0) { StatusLine = "No name entered — client not created."; return; }
+
+        var created = WithScanConfig(ClientProfile.New(name), CaptureScanConfig());
+        ClientStore.Upsert(created);
+        // Adopt it as active WITHOUT clearing the grid — nothing contextual changed, the settings simply gained a
+        // name. LoadClients reselects under the _restoringClient guard, so the switch handler doesn't fire.
+        LoadClients(created.Id);
+        _baselineStore = null;
+        SaveSettings();
+        _ = RefreshHistoryAsync();
+        EvaluateBaseline();
+        StatusLine = $"Saved current settings as client '{name}'.";
     }
 
     [RelayCommand]
