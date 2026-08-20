@@ -433,6 +433,9 @@
               <Button Content="Inventory selected" Command="{Binding InventorySelectedCommand}" />
               <Button Content="Inventory alive" Command="{Binding InventoryAliveCommand}"
                       Background="{StaticResource AccentBrush}" Foreground="White" />
+              <Button Content="{Binding WakeMissingText}" Command="{Binding WakeMissingCommand}"
+                      Visibility="{Binding WakeMissingText, Converter={StaticResource NotEmptyToVis}}"
+                      ToolTip="Send Wake-on-LAN to hosts with a known MAC that aren't currently alive, then recheck them" />
               <Separator Style="{x:Null}" Width="1" Background="{StaticResource BorderBrush}" Margin="6,2" />
               <Button Content="Open scan…" Command="{Binding OpenScanCommand}"
                       ToolTip="Load a previously exported JSON scan back into the grid" />
@@ -458,13 +461,23 @@
           <DataGrid.InputBindings>
             <KeyBinding Key="Return" Command="{Binding OpenMachineDetailCommand}" />
           </DataGrid.InputBindings>
-          <!-- Baseline actions (a ContextMenu inherits the grid's DataContext = the VM). -->
+          <!-- Row actions + baseline (a ContextMenu inherits the grid's DataContext = the VM). The "Actions"
+               submenu is rebuilt per selection from HostActionRules. -->
           <DataGrid.ContextMenu>
             <ContextMenu>
+              <MenuItem Header="Actions" ItemsSource="{Binding HostActionItems}">
+                <MenuItem.ItemContainerStyle>
+                  <Style TargetType="MenuItem">
+                    <Setter Property="Header" Value="{Binding Header}" />
+                    <Setter Property="Command" Value="{Binding DataContext.RunHostActionCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                    <Setter Property="CommandParameter" Value="{Binding}" />
+                  </Style>
+                </MenuItem.ItemContainerStyle>
+              </MenuItem>
+              <Separator />
               <MenuItem Header="Trust this device (add to baseline)"
                         Command="{Binding TrustDeviceCommand}" CommandParameter="{Binding SelectedMachine}" />
               <MenuItem Header="Trust all unknown devices" Command="{Binding TrustAllUnknownCommand}" />
-              <Separator />
               <MenuItem Header="Bless current results as baseline" Command="{Binding BlessCurrentAsBaselineCommand}"
                         ToolTip="Future scans flag devices not in this set as NEW" />
             </ContextMenu>

@@ -57,6 +57,10 @@ public sealed class RunLog
     /// <summary>Headless CLI scan lifecycle: started / finished / failed.</summary>
     public void CliScan(string stage, object data) => Write("cli_scan", new { stage, data });
 
+    /// <summary>A Wake-on-LAN send, attributed with the destinations attempted (MAC is not a secret).</summary>
+    public void WolSent(string host, string mac, IReadOnlyList<string> destinations)
+        => Write("wol_sent", new { host, mac, destinations });
+
     /// <summary>Unhandled exception, from the dispatcher, appdomain, or task scheduler.</summary>
     public void Crash(string source, string detail) => Write("crash", new { source, detail });
 

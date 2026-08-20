@@ -301,6 +301,8 @@ public partial class MainViewModel : ObservableObject
         {
             InventoryAliveCommand.NotifyCanExecuteChanged(); // CanInventory depends on Machines.Count
             CompareCommand.NotifyCanExecuteChanged();
+            RefreshWakeMissing();
+            WakeMissingCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -432,6 +434,7 @@ public partial class MainViewModel : ObservableObject
     {
         InventorySelectedCommand.NotifyCanExecuteChanged();
         OpenMachineDetailCommand.NotifyCanExecuteChanged();
+        RebuildHostActions();
     }
 
     partial void OnIsCancellingChanged(bool value) => RefreshScanCommands();
