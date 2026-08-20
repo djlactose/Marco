@@ -154,6 +154,16 @@ public static class RuleCheckCatalog
         },
 
         ["no-auto-logon"] = (m, _) => Bool(m.Security.AutoAdminLogon, passWhen: false, "automatic logon is enabled (password in registry)"),
+
+        ["os-supported"] = (m, _) => m.Lifecycle?.OsSupport switch
+        {
+            Marco.Core.Lifecycle.OsSupportStatus.EndOfLife =>
+                (RuleStatus.Fail, m.Lifecycle.SupportSummary ?? "OS past end of support"),
+            Marco.Core.Lifecycle.OsSupportStatus.EndingSoon =>
+                (RuleStatus.Pass, m.Lifecycle.SupportSummary), // still supported — the date in the detail is the nudge
+            Marco.Core.Lifecycle.OsSupportStatus.Supported => (RuleStatus.Pass, null),
+            _ => (RuleStatus.Unknown, null),
+        },
     };
 
     private static (RuleStatus, string?) Bool(bool? value, bool passWhen, string failDetail) => value switch

@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Compliance\Resources\default-rules.json" />
+    <EmbeddedResource Include="Lifecycle\Resources\os-eol.json" />
   </ItemGroup>
 
 </Project>

@@ -143,6 +143,17 @@ public sealed class Machine : ObservableBase
     public string? ComplianceDisplay => _compliance is not { } c ? null
         : (c.Score is { } s ? $"{s}%" : "—") + (c.FailCount > 0 ? $" · {c.FailCount} fail" : "");
 
+    private Lifecycle.LifecycleInfo? _lifecycle;
+    /// <summary>OS end-of-support + hardware age (see Marco.Core.Lifecycle); evaluated alongside compliance.</summary>
+    public Lifecycle.LifecycleInfo? Lifecycle
+    {
+        get => _lifecycle;
+        set { if (Set(ref _lifecycle, value)) Raise(nameof(LifecycleDisplay)); }
+    }
+
+    /// <summary>"EOL 2025-10" / "ends 2026-11" / "OK" for the grid's OS EOL column.</summary>
+    public string? LifecycleDisplay => _lifecycle?.Display;
+
     // Scalar groups. Settable so a reopened scan can hand its deserialized object straight over; the detail
     // pane re-reads them through NotifyInventoryUpdated like System/Os.
     private UpdateInfo _updates = new();

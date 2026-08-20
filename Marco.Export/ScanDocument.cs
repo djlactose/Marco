@@ -75,7 +75,8 @@ public sealed record MachineDto(
     int? ThermalTempC = null,
     ConnectFailure? ConnectFailure = null,
     bool? ConnectFailureLocalAccount = null,
-    Marco.Core.Compliance.ComplianceResult? Compliance = null)
+    Marco.Core.Compliance.ComplianceResult? Compliance = null,
+    Marco.Core.Lifecycle.LifecycleInfo? Lifecycle = null)
 {
     public static MachineDto From(Machine m) => new(
         m.Address, m.Name, m.Fqdn, m.DeviceType, m.IsVirtual, m.Vendor,
@@ -95,7 +96,8 @@ public sealed record MachineDto(
         m.Monitors.ToList(), m.Gpus.ToList(), m.Battery, m.ThermalTempC,
         m.ConnectFailure == Marco.Core.Model.ConnectFailure.None ? null : m.ConnectFailure,
         m.ConnectFailureLocalAccount ? true : null,
-        m.Compliance);
+        m.Compliance,
+        m.Lifecycle);
 
     public Machine ToMachine()
     {
@@ -136,6 +138,7 @@ public sealed record MachineDto(
         if (ConnectFailure is { } cf) m.ConnectFailure = cf;
         if (ConnectFailureLocalAccount is { } la) m.ConnectFailureLocalAccount = la;
         if (Compliance is not null) m.Compliance = Compliance;
+        if (Lifecycle is not null) m.Lifecycle = Lifecycle;
         m.RefreshCounts();
         return m;
     }

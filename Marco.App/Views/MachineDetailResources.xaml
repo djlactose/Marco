@@ -167,6 +167,15 @@
           </ItemsControl>
         </StackPanel>
 
+        <!-- Lifecycle (OS end-of-support + hardware age) -->
+        <StackPanel Visibility="{Binding Lifecycle, Converter={StaticResource NotEmptyToVis}, FallbackValue=Collapsed}">
+          <TextBlock Text="Lifecycle" Style="{StaticResource SectionHeader}" Margin="0,10,0,4" />
+          <TextBlock Text="{Binding Lifecycle.SupportSummary}" TextWrapping="Wrap"
+                     Visibility="{Binding Lifecycle.SupportSummary, Converter={StaticResource NotEmptyToVis}, FallbackValue=Collapsed}" />
+          <TextBlock Text="{Binding Lifecycle.HardwareAgeSummary}" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                     Visibility="{Binding Lifecycle.HardwareAgeSummary, Converter={StaticResource NotEmptyToVis}, FallbackValue=Collapsed}" />
+        </StackPanel>
+
         <!-- CPU / Memory -->
         <TextBlock Text="Processors" Style="{StaticResource SectionHeader}" Margin="0,10,0,4"
                    Visibility="{Binding CpuCount, Converter={StaticResource NotEmptyToVis}}" />

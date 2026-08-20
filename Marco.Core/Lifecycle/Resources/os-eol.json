@@ -1,0 +1,40 @@
+{
+  "SchemaVersion": 1,
+  "Updated": "2026-08-20",
+  "Windows": [
+    { "Product": "Windows 10", "Release": "1809", "Build": "17763", "Kind": "client", "EosHomePro": "2020-11-10", "EosEnterprise": "2021-05-11" },
+    { "Product": "Windows 10", "Release": "1909", "Build": "18363", "Kind": "client", "EosHomePro": "2021-05-11", "EosEnterprise": "2022-05-10" },
+    { "Product": "Windows 10", "Release": "2004", "Build": "19041", "Kind": "client", "EosHomePro": "2021-12-14", "EosEnterprise": "2021-12-14" },
+    { "Product": "Windows 10", "Release": "20H2", "Build": "19042", "Kind": "client", "EosHomePro": "2022-05-10", "EosEnterprise": "2023-05-09" },
+    { "Product": "Windows 10", "Release": "21H1", "Build": "19043", "Kind": "client", "EosHomePro": "2022-12-13", "EosEnterprise": "2022-12-13" },
+    { "Product": "Windows 10", "Release": "21H2", "Build": "19044", "Kind": "client", "EosHomePro": "2023-06-13", "EosEnterprise": "2024-06-11" },
+    { "Product": "Windows 10", "Release": "22H2", "Build": "19045", "Kind": "client", "EosHomePro": "2025-10-14", "EosEnterprise": "2025-10-14", "EsuEnd": "2026-10-13" },
+    { "Product": "Windows 11", "Release": "21H2", "Build": "22000", "Kind": "client", "EosHomePro": "2023-10-10", "EosEnterprise": "2024-10-08" },
+    { "Product": "Windows 11", "Release": "22H2", "Build": "22621", "Kind": "client", "EosHomePro": "2024-10-08", "EosEnterprise": "2025-10-14" },
+    { "Product": "Windows 11", "Release": "23H2", "Build": "22631", "Kind": "client", "EosHomePro": "2025-11-11", "EosEnterprise": "2026-11-10" },
+    { "Product": "Windows 11", "Release": "24H2", "Build": "26100", "Kind": "client", "EosHomePro": "2026-10-13", "EosEnterprise": "2027-10-12" },
+    { "Product": "Windows 11", "Release": "25H2", "Build": "26200", "Kind": "client", "EosHomePro": "2027-10-12", "EosEnterprise": "2028-10-10" },
+    { "Product": "Windows Server 2012 R2", "Build": "9600", "Kind": "server", "EosMainstream": "2018-10-09", "EosExtended": "2023-10-10", "EsuEnd": "2026-10-13" },
+    { "Product": "Windows Server 2016", "Build": "14393", "Kind": "server", "EosMainstream": "2022-01-11", "EosExtended": "2027-01-12" },
+    { "Product": "Windows Server 2019", "Build": "17763", "Kind": "server", "EosMainstream": "2024-01-09", "EosExtended": "2029-01-09" },
+    { "Product": "Windows Server 2022", "Build": "20348", "Kind": "server", "EosMainstream": "2026-10-13", "EosExtended": "2031-10-14" },
+    { "Product": "Windows Server 2025", "Build": "26100", "Kind": "server", "EosMainstream": "2029-10-09", "EosExtended": "2034-10-10" }
+  ],
+  "Linux": [
+    { "Distro": "Ubuntu", "VersionMatch": "18.04", "Eos": "2023-05-31", "EosExtended": "2028-04-01" },
+    { "Distro": "Ubuntu", "VersionMatch": "20.04", "Eos": "2025-05-31", "EosExtended": "2030-04-02" },
+    { "Distro": "Ubuntu", "VersionMatch": "22.04", "Eos": "2027-06-01", "EosExtended": "2032-04-09" },
+    { "Distro": "Ubuntu", "VersionMatch": "24.04", "Eos": "2029-05-31", "EosExtended": "2034-04-25" },
+    { "Distro": "Debian", "VersionMatch": "10", "Eos": "2022-09-10", "EosExtended": "2024-06-30" },
+    { "Distro": "Debian", "VersionMatch": "11", "Eos": "2024-08-14", "EosExtended": "2026-08-31" },
+    { "Distro": "Debian", "VersionMatch": "12", "Eos": "2026-06-10", "EosExtended": "2028-06-30" },
+    { "Distro": "Red Hat Enterprise Linux", "VersionMatch": "7", "Eos": "2024-06-30", "EosExtended": "2028-06-30" },
+    { "Distro": "Red Hat Enterprise Linux", "VersionMatch": "8", "Eos": "2029-05-31", "EosExtended": "2032-05-31" },
+    { "Distro": "Red Hat Enterprise Linux", "VersionMatch": "9", "Eos": "2032-05-31", "EosExtended": "2035-05-31" },
+    { "Distro": "CentOS Linux", "VersionMatch": "7", "Eos": "2024-06-30" },
+    { "Distro": "AlmaLinux", "VersionMatch": "8", "Eos": "2029-05-31" },
+    { "Distro": "AlmaLinux", "VersionMatch": "9", "Eos": "2032-05-31" },
+    { "Distro": "Rocky Linux", "VersionMatch": "8", "Eos": "2029-05-31" },
+    { "Distro": "Rocky Linux", "VersionMatch": "9", "Eos": "2032-05-31" }
+  ]
+}

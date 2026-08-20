@@ -29,9 +29,20 @@ public partial class MainViewModel
         if (Machines.Count == 0) { FleetComplianceText = null; return; }
         var machines = Machines.ToList();
         var rules = ComplianceRules;
-        var results = await Task.Run(() => machines.Select(m => ComplianceEvaluator.Evaluate(m, rules)).ToList());
+        // Lifecycle first: the os-supported rule reads Machine.Lifecycle.
+        var evaluated = await Task.Run(() =>
+        {
+            var eol = Marco.Core.Lifecycle.OsEolTable.Data;
+            var today = DateTime.Today;
+            return machines.Select(m =>
+            {
+                var lifecycle = Marco.Core.Lifecycle.LifecycleEvaluator.Evaluate(m, eol, today);
+                m.Lifecycle = lifecycle; // scalar assign; INPC raise is safe off-thread like Status
+                return ComplianceEvaluator.Evaluate(m, rules);
+            }).ToList();
+        });
         for (int i = 0; i < machines.Count; i++)
-            machines[i].Compliance = results[i];
+            machines[i].Compliance = evaluated[i];
 
         var fleet = ComplianceEvaluator.Summarize(machines);
         FleetComplianceText = fleet.EvaluatedMachines == 0 ? null

@@ -48,7 +48,8 @@ public sealed class CsvExporter
             "Disks", "SoftwareCount", "Adapters", "BIOS", "Motherboard",
             "Hotfixes", "LastHotfix", "PendingReboot", "WSUS",
             "Antivirus", "Defender", "Firewall", "BitLocker", "TPM", "SecureBoot", "Firmware", "RDP", "SMB", "LAPS",
-            "LocalAdmins", "Services", "AutoServicesStopped", "Monitors", "GPU", "Battery", "OpenPorts", "LastScanned");
+            "LocalAdmins", "Services", "AutoServicesStopped", "Monitors", "GPU", "Battery", "OpenPorts", "LastScanned",
+            "Compliance", "OSEol");
 
         foreach (var m in doc.Machines)
         {
@@ -72,7 +73,9 @@ public sealed class CsvExporter
                 Num(m.Services?.Count), Num(m.Services?.Count(x => IsAutoStopped(x))),
                 Num(m.Monitors?.Count), m.Gpus?.FirstOrDefault()?.Name, m.Battery?.Summary,
                 m.OpenPorts is { Count: > 0 } op ? string.Join(" ", op) : "",
-                DateTime2(m.LastScanned));
+                DateTime2(m.LastScanned),
+                m.Compliance?.Score is { } score ? $"{score}%" : "",
+                m.Lifecycle?.Display);
         }
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(true)); // BOM for Excel
         return path;

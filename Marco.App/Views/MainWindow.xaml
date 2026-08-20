@@ -499,6 +499,7 @@
             <DataGridTextColumn Header="Reboot?" Binding="{Binding Updates.PendingRebootDisplay}" Width="60" />
             <DataGridTextColumn Header="Antivirus" Binding="{Binding AntivirusSummary}" Width="160" />
             <DataGridTextColumn Header="Compliance" Binding="{Binding ComplianceDisplay}" Width="105" />
+            <DataGridTextColumn Header="OS EOL" Binding="{Binding LifecycleDisplay}" Width="85" />
             <DataGridTextColumn Header="RAM"
                                 Binding="{Binding TotalMemoryBytes, Converter={StaticResource BytesToGb}}" Width="70" />
             <DataGridTextColumn Header="CPUs" Binding="{Binding CpuCount}" Width="55" />
