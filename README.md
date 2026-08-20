@@ -125,6 +125,39 @@ runtime extraction) instead of the single self-extracting exe.
 
 ---
 
+## Scheduled / headless scans
+
+The same executable runs a scan from the command line — no window — when the first argument is `scan`:
+
+```
+Marco.exe scan --targets <file|token[,token...]> [--out <path.json>]
+          [--csv <dir>] [--collectors Name,Name] [--concurrency N]
+          [--no-inventory] [--credential-label <label>] [--client <name>]
+          [--quiet] [--log <path>]
+```
+
+At least one of `--out` / `--csv` is required. `--targets` accepts a host-file path or inline tokens; `--client`
+loads a saved client profile's targets and credential scope. The run is also copied into the scan history, so an
+interactive Marco sees it. Exit codes: `0` ok, `1` usage error, `2` scan failed, `3` output write failed,
+**`4` credentials could not be decrypted**.
+
+**Credentials come from the saved store** (DPAPI, bound to the Windows user who saved them). Marco never accepts a
+plaintext password on the command line. This has one hard consequence for Task Scheduler: the task must run **as
+that same user, with a stored password** — "Run whether user is logged on or not" *with* the password saved, not
+an S4U logon (which cannot unlock the DPAPI key). Exit code `4` means exactly this mismatch.
+
+Create a nightly task (run once, from an elevated prompt, adjusting paths and the account):
+
+```
+schtasks /Create /TN "Marco nightly" /SC DAILY /ST 02:00 /RU DOMAIN\svc-marco /RP * ^
+  /TR "\"C:\Tools\Marco.exe\" scan --targets \"C:\Tools\targets.txt\" --out \"C:\Tools\scans\nightly.json\" --quiet"
+```
+
+The CLI path never touches the auto-update pipeline, so a scheduled scan can never swap the exe under a running
+interactive instance.
+
+---
+
 ## Target prerequisites
 
 For authenticated inventory, each **target** needs:

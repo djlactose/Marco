@@ -12,7 +12,7 @@ namespace Marco.Inventory.Linux;
 /// one authenticates, then remembers the winner — never mutating a password. Each collector group is
 /// failure-isolated so a missing command (e.g. no lscpu) records a per-collector status, not a whole-host abort.
 /// </summary>
-public sealed class LinuxInventoryRunner
+public sealed class LinuxInventoryRunner : IInventoryRunner
 {
     private readonly ISshSessionFactory _factory;
     private readonly int _port;

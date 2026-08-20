@@ -54,6 +54,9 @@ public sealed class RunLog
     /// <summary>Baseline lifecycle: blessed / trusted / evaluated, with counts only.</summary>
     public void Baseline(string action, int known, int unknown) => Write("baseline", new { action, known, unknown });
 
+    /// <summary>Headless CLI scan lifecycle: started / finished / failed.</summary>
+    public void CliScan(string stage, object data) => Write("cli_scan", new { stage, data });
+
     /// <summary>Unhandled exception, from the dispatcher, appdomain, or task scheduler.</summary>
     public void Crash(string source, string detail) => Write("crash", new { source, detail });
 

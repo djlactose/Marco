@@ -20,13 +20,25 @@ public sealed record CredentialCandidate(
 /// <summary>Result of an inventory pass against a host.</summary>
 public sealed record InventoryOutcome(bool Authenticated, string? CredentialLabel, MachineStatus Status, string? Detail);
 
+/// <summary>The inventory-pass contract shared by the Windows (WMI) and Linux (SSH) runners, so a caller can hold
+/// either behind one type (the headless CLI routing loop). The signature both runners already expose.</summary>
+public interface IInventoryRunner
+{
+    Task<InventoryOutcome> InventoryAsync(
+        Machine machine,
+        IReadOnlyList<CredentialCandidate> candidates,
+        IReadOnlyDictionary<string, CredentialCandidate>? perHostOverrides,
+        ISet<string>? enabledCollectors,
+        CancellationToken ct);
+}
+
 /// <summary>
 /// Runs the selected collectors against one host. Owns credential try-and-remember: for each host it tries the
 /// remembered set first, then each candidate in order until one authenticates, then remembers the winner —
 /// never mutating or retrying a password. Each collector is failure-isolated so a missing WMI class on an old OS
 /// records a per-collector status instead of aborting the host.
 /// </summary>
-public sealed class InventoryRunner
+public sealed class InventoryRunner : IInventoryRunner
 {
     private readonly IWmiSessionFactory _sessions;
     private readonly IRemoteRegistryFactory _registries;

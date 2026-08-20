@@ -9,6 +9,8 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>Marco.App</RootNamespace>
     <AssemblyName>Marco</AssemblyName>
+    <!-- Custom entry point: `scan` args take the headless CLI path, everything else launches WPF. -->
+    <StartupObject>Marco.App.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\marco.ico</ApplicationIcon>
     <!-- Single-file publish is driven from build/publish.ps1; keep the csproj build clean. -->
