@@ -205,6 +205,8 @@ public partial class MainViewModel : ObservableObject
         _autoSaveScans = s.AutoSaveScans;
         _scanHistoryLimit = Math.Max(1, s.ScanHistoryLimit);
         _autoSaveDiscoveryOnly = s.AutoSaveDiscoveryOnly;
+        _complianceOverrides = s.ComplianceRuleOverrides;
+        _rules = null;
         BuildCollectorOptions(s.CollectorOverrides);
     }
 #pragma warning restore MVVMTK0034
@@ -227,6 +229,7 @@ public partial class MainViewModel : ObservableObject
         AutoSaveScans = _autoSaveScans,
         ScanHistoryLimit = _scanHistoryLimit,
         AutoSaveDiscoveryOnly = _autoSaveDiscoveryOnly,
+        ComplianceRuleOverrides = _complianceOverrides,
     });
 
     partial void OnFilterTextChanged(string value) => MachinesView.Refresh();
@@ -585,6 +588,7 @@ public partial class MainViewModel : ObservableObject
         LastRanges = Array.Empty<string>();
         _currentRunId = null;
         HasDoctorFindings = false;
+        FleetComplianceText = null;
         AliveCount = UnreachableCount = TotalCount = 0;
         ProgressFraction = 0;
         StatusLine = "Cleared.";

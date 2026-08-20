@@ -360,6 +360,9 @@ public sealed class SecurityInfo : ObservableBase
     public string? UacAdminPrompt { get; set; }
     public bool? LocalAccountTokenFilterPolicy { get; set; }
 
+    /// <summary>Winlogon AutoAdminLogon — true means a password sits in the registry and the box logs itself in.</summary>
+    public bool? AutoAdminLogon { get; set; }
+
     // Remote Desktop
     public bool? RdpEnabled { get; set; }
     public bool? RdpNlaRequired { get; set; }

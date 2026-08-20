@@ -8,4 +8,8 @@
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
   </PropertyGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Compliance\Resources\default-rules.json" />
+  </ItemGroup>
+
 </Project>

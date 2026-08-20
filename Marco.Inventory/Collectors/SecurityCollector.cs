@@ -20,6 +20,7 @@ public sealed class SecurityCollector : IInventoryCollector
     private const string ControlKey = @"SYSTEM\CurrentControlSet\Control";
     private const string UacKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System";
     private const string TerminalServerKey = @"SYSTEM\CurrentControlSet\Control\Terminal Server";
+    private const string WinlogonKey = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon";
     private const string RdpTcpKey = @"SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp";
     private const string LanmanKey = @"SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters";
     private const string LegacyLapsKey = @"SOFTWARE\Policies\Microsoft Services\AdmPwd";
@@ -176,6 +177,14 @@ public sealed class SecurityCollector : IInventoryCollector
             s.UacEnabled = RegistryValues.AsBool(RegistryValues.Get(v, "EnableLUA")) ?? true; // absent = default on
             s.UacAdminPrompt = RegistryValues.AsInt(RegistryValues.Get(v, "ConsentPromptBehaviorAdmin")) is { } p ? DescribeAdminPrompt(p) : null;
             s.LocalAccountTokenFilterPolicy = RegistryValues.AsBool(RegistryValues.Get(v, "LocalAccountTokenFilterPolicy")) ?? false;
+        });
+
+        // 7b. Automatic logon (registry) — REG_SZ "1" when a stored password logs the box in by itself.
+        ct.ThrowIfCancellationRequested();
+        steps.Run("Auto-logon (registry)", () =>
+        {
+            var wl = reg.GetValues(RegistryRoot.LocalMachine, WinlogonKey, new[] { "AutoAdminLogon" });
+            s.AutoAdminLogon = RegistryValues.AsBool(RegistryValues.Get(wl, "AutoAdminLogon")) ?? false; // absent = off
         });
 
         // 8. Remote Desktop (registry).

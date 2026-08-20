@@ -74,7 +74,8 @@ public sealed record MachineDto(
     BatteryInfo? Battery = null,
     int? ThermalTempC = null,
     ConnectFailure? ConnectFailure = null,
-    bool? ConnectFailureLocalAccount = null)
+    bool? ConnectFailureLocalAccount = null,
+    Marco.Core.Compliance.ComplianceResult? Compliance = null)
 {
     public static MachineDto From(Machine m) => new(
         m.Address, m.Name, m.Fqdn, m.DeviceType, m.IsVirtual, m.Vendor,
@@ -93,7 +94,8 @@ public sealed record MachineDto(
         m.Services.ToList(), m.StartupItems.ToList(), m.ScheduledTasks.ToList(),
         m.Monitors.ToList(), m.Gpus.ToList(), m.Battery, m.ThermalTempC,
         m.ConnectFailure == Marco.Core.Model.ConnectFailure.None ? null : m.ConnectFailure,
-        m.ConnectFailureLocalAccount ? true : null);
+        m.ConnectFailureLocalAccount ? true : null,
+        m.Compliance);
 
     public Machine ToMachine()
     {
@@ -133,6 +135,7 @@ public sealed record MachineDto(
         if (Gpus is not null) m.Gpus = Gpus.ToList();
         if (ConnectFailure is { } cf) m.ConnectFailure = cf;
         if (ConnectFailureLocalAccount is { } la) m.ConnectFailureLocalAccount = la;
+        if (Compliance is not null) m.Compliance = Compliance;
         m.RefreshCounts();
         return m;
     }

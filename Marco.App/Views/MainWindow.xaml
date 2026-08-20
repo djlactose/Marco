@@ -88,6 +88,10 @@
         <TextBlock Grid.Column="0" Text="{Binding StatusLine}" VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+          <Button Content="{Binding FleetComplianceText}" Command="{Binding OpenFleetHealthCommand}"
+                  Padding="8,2" MinWidth="0" Margin="0,0,12,0"
+                  Visibility="{Binding FleetComplianceText, Converter={StaticResource NotEmptyToVis}}"
+                  ToolTip="Fleet compliance: average score, top failing rules, and the rule checklist" />
           <Button Content="Doctor…" Command="{Binding OpenDoctorCommand}" Padding="8,2" MinWidth="0" Margin="0,0,12,0"
                   Visibility="{Binding HasDoctorFindings, Converter={StaticResource BoolToVis}}"
                   ToolTip="Hosts that failed inventory, grouped by diagnosed cause, with copy-paste fixes" />
@@ -494,6 +498,7 @@
             <DataGridTextColumn Header="Release" Binding="{Binding Updates.DisplayVersion}" Width="65" />
             <DataGridTextColumn Header="Reboot?" Binding="{Binding Updates.PendingRebootDisplay}" Width="60" />
             <DataGridTextColumn Header="Antivirus" Binding="{Binding AntivirusSummary}" Width="160" />
+            <DataGridTextColumn Header="Compliance" Binding="{Binding ComplianceDisplay}" Width="105" />
             <DataGridTextColumn Header="RAM"
                                 Binding="{Binding TotalMemoryBytes, Converter={StaticResource BytesToGb}}" Width="70" />
             <DataGridTextColumn Header="CPUs" Binding="{Binding CpuCount}" Width="55" />

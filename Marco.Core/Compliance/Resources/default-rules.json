@@ -1,0 +1,30 @@
+{
+  "SchemaVersion": 1,
+  "Id": "marco-baseline",
+  "Name": "Marco baseline",
+  "Description": "Opinionated Windows hardening baseline evaluated from data the collectors already gather. Null inputs read Unknown, never Fail. Copy this file into Marco.Data\\compliance\\ and edit to make your own pack; same-id rules replace these.",
+  "Rules": [
+    { "Id": "bitlocker-os-volume", "Name": "BitLocker on OS volume", "Description": "The operating system volume is BitLocker-protected.", "Severity": "Critical", "Check": "bitlocker-os-volume", "AppliesTo": { "Os": "windows", "InstallationType": "client" } },
+    { "Id": "smb1-disabled", "Name": "SMB1 disabled", "Description": "The SMBv1 server is not enabled.", "Severity": "Critical", "Check": "smb1-disabled", "AppliesTo": { "Os": "windows" } },
+    { "Id": "disks-healthy", "Name": "No failing disks", "Description": "No disk reports SMART failure prediction or an unhealthy status.", "Severity": "Critical", "Check": "disks-healthy" },
+    { "Id": "av-enabled", "Name": "Antivirus enabled", "Description": "Defender or a third-party antivirus product is enabled.", "Severity": "Critical", "Check": "av-enabled", "AppliesTo": { "Os": "windows" } },
+    { "Id": "av-signatures-fresh", "Name": "Antivirus signatures current", "Description": "Signatures are no older than the threshold.", "Severity": "High", "Check": "av-signatures-fresh", "Params": { "maxDays": 7 }, "AppliesTo": { "Os": "windows" } },
+    { "Id": "firewall-all-profiles", "Name": "Firewall on all profiles", "Description": "Domain, private and public firewall profiles are all on.", "Severity": "High", "Check": "firewall-all-profiles", "AppliesTo": { "Os": "windows" } },
+    { "Id": "rdp-requires-nla", "Name": "RDP requires NLA", "Description": "Remote Desktop, when enabled, requires Network Level Authentication.", "Severity": "High", "Check": "rdp-requires-nla", "AppliesTo": { "Os": "windows" } },
+    { "Id": "secure-boot", "Name": "Secure Boot enabled", "Description": "UEFI Secure Boot is on.", "Severity": "High", "Check": "secure-boot", "AppliesTo": { "Os": "windows" } },
+    { "Id": "tpm-2-enabled", "Name": "TPM 2.0 present and enabled", "Description": "A TPM 2.0 is present and enabled.", "Severity": "High", "Check": "tpm-2-enabled", "AppliesTo": { "Os": "windows" } },
+    { "Id": "patched-recently", "Name": "Patched recently", "Description": "At least one hotfix installed within the threshold.", "Severity": "High", "Check": "patched-recently", "Params": { "maxDays": 60 }, "AppliesTo": { "Os": "windows" } },
+    { "Id": "no-passwordless-accounts", "Name": "No passwordless enabled accounts", "Description": "No enabled local account allows an empty password.", "Severity": "High", "Check": "no-passwordless-accounts", "AppliesTo": { "Os": "windows" } },
+    { "Id": "no-auto-logon", "Name": "No automatic logon", "Description": "Winlogon AutoAdminLogon is off (a stored password would log the machine in by itself).", "Severity": "High", "Check": "no-auto-logon", "AppliesTo": { "Os": "windows" } },
+    { "Id": "laps-managed", "Name": "LAPS manages the local admin password", "Description": "Windows LAPS or legacy LAPS manages this host.", "Severity": "Medium", "Check": "laps-managed", "AppliesTo": { "Os": "windows", "DomainJoinedOnly": true } },
+    { "Id": "uac-enabled", "Name": "UAC enabled", "Description": "User Account Control is on.", "Severity": "Medium", "Check": "uac-enabled", "AppliesTo": { "Os": "windows" } },
+    { "Id": "smb-signing-required", "Name": "SMB signing required", "Description": "The SMB server requires signing.", "Severity": "Medium", "Check": "smb-signing-required", "AppliesTo": { "Os": "windows" } },
+    { "Id": "auto-update-enabled", "Name": "Automatic updates not disabled", "Description": "Windows Update is not disabled by policy.", "Severity": "Medium", "Check": "auto-update-enabled", "AppliesTo": { "Os": "windows" } },
+    { "Id": "token-filtering-intact", "Name": "Remote token filtering intact", "Description": "LocalAccountTokenFilterPolicy is not set (local accounts keep filtered tokens over the network). Note: Marco's own remote inventory with local accounts needs this OFF — disable this rule if that trade-off is accepted.", "Severity": "Medium", "Check": "token-filtering-intact", "AppliesTo": { "Os": "windows" } },
+    { "Id": "no-pending-reboot", "Name": "No pending reboot", "Description": "No servicing operation is waiting for a restart.", "Severity": "Low", "Check": "no-pending-reboot", "AppliesTo": { "Os": "windows" } },
+    { "Id": "defender-realtime", "Name": "Defender real-time protection", "Description": "When Defender is the active antivirus, real-time protection is on.", "Severity": "Low", "Check": "defender-realtime", "AppliesTo": { "Os": "windows" } },
+    { "Id": "defender-tamper-protection", "Name": "Defender tamper protection", "Description": "When Defender is the active antivirus, tamper protection is on.", "Severity": "Low", "Check": "defender-tamper-protection", "AppliesTo": { "Os": "windows" } },
+    { "Id": "admins-limited", "Name": "Local Administrators limited", "Description": "The local Administrators group has no more members than the threshold.", "Severity": "Low", "Check": "admins-limited", "Params": { "maxAdmins": 5 }, "AppliesTo": { "Os": "windows" } },
+    { "Id": "defender-scan-recent", "Name": "Defender scanned recently", "Description": "A Defender quick scan ran within the threshold.", "Severity": "Low", "Check": "defender-scan-recent", "Params": { "maxDays": 14 }, "AppliesTo": { "Os": "windows" } }
+  ]
+}

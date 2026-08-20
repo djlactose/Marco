@@ -31,6 +31,7 @@ public sealed class CsvExporter
         written.Add(WriteGpus(doc, Path.Combine(directory, "gpus.csv")));
         written.Add(WritePrinters(doc, Path.Combine(directory, "printers.csv")));
         written.Add(WriteUsb(doc, Path.Combine(directory, "usb.csv")));
+        written.Add(WriteCompliance(doc, Path.Combine(directory, "compliance.csv")));
 
         WriteMetadata(doc, Path.Combine(directory, "scan-info.txt"));
         return written;
@@ -260,6 +261,25 @@ public sealed class CsvExporter
 
     private static string Write(string path, StringBuilder sb)
     {
+        File.WriteAllText(path, sb.ToString(), new UTF8Encoding(true));
+        return path;
+    }
+
+    /// <summary>One row per machine × non-passing rule (Fail/Unknown); passing and not-applicable rules are
+    /// noise in a findings file. Machines without an evaluation are simply absent.</summary>
+    private string WriteCompliance(ScanDocument doc, string path)
+    {
+        var sb = new StringBuilder();
+        Row(sb, "Address", "Name", "Score", "Rule", "Severity", "Status", "Detail");
+        foreach (var m in doc.Machines)
+        {
+            if (m.Compliance is not { } c) continue;
+            foreach (var r in c.Results)
+            {
+                if (r.Status is Marco.Core.Compliance.RuleStatus.Pass or Marco.Core.Compliance.RuleStatus.NotApplicable) continue;
+                Row(sb, m.Address, m.Name, Num(c.Score), r.Name, r.Severity.ToString(), r.Status.ToString(), r.Detail);
+            }
+        }
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(true));
         return path;
     }

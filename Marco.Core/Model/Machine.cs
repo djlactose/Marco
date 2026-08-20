@@ -130,6 +130,19 @@ public sealed class Machine : ObservableBase
     private List<GpuInfo> _gpus = new();
     public List<GpuInfo> Gpus { get => _gpus; set => _gpus = value ?? new(); }
 
+    private Compliance.ComplianceResult? _compliance;
+    /// <summary>Latest compliance evaluation (see Marco.Core.Compliance); null until inventory data exists.
+    /// Recomputed against the current rule packs — a reopened scan is re-evaluated, not trusted.</summary>
+    public Compliance.ComplianceResult? Compliance
+    {
+        get => _compliance;
+        set { if (Set(ref _compliance, value)) Raise(nameof(ComplianceDisplay)); }
+    }
+
+    /// <summary>"82% · 3 fail" for the grid column; null keeps the cell empty.</summary>
+    public string? ComplianceDisplay => _compliance is not { } c ? null
+        : (c.Score is { } s ? $"{s}%" : "—") + (c.FailCount > 0 ? $" · {c.FailCount} fail" : "");
+
     // Scalar groups. Settable so a reopened scan can hand its deserialized object straight over; the detail
     // pane re-reads them through NotifyInventoryUpdated like System/Os.
     private UpdateInfo _updates = new();

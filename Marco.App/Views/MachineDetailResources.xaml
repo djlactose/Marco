@@ -148,6 +148,25 @@
           </StackPanel>
         </UniformGrid>
 
+        <!-- Compliance (rule evaluation; see Marco.Core.Compliance) -->
+        <StackPanel Visibility="{Binding ComplianceDisplay, Converter={StaticResource NotEmptyToVis}, FallbackValue=Collapsed}">
+          <TextBlock Text="Compliance" Style="{StaticResource SectionHeader}" Margin="0,10,0,4" />
+          <TextBlock>
+            <Run Text="{Binding ComplianceDisplay, Mode=OneWay}" FontWeight="SemiBold" /><Run Text="   " /><Run
+              Text="{Binding Compliance.PassCount, Mode=OneWay}" /><Run Text=" pass, " /><Run
+              Text="{Binding Compliance.UnknownCount, Mode=OneWay}" /><Run Text=" unknown" />
+          </TextBlock>
+          <ItemsControl ItemsSource="{Binding Compliance.Failures}" Margin="0,2,0,0">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <TextBlock FontSize="12" TextWrapping="Wrap" Foreground="#8B1A12">
+                  <Run Text="✗" /><Run Text=" " /><Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=" — " /><Run Text="{Binding Severity, Mode=OneWay}" /><Run Text="{Binding Detail, Mode=OneWay, StringFormat=' · {0}'}" />
+                </TextBlock>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
         <!-- CPU / Memory -->
         <TextBlock Text="Processors" Style="{StaticResource SectionHeader}" Margin="0,10,0,4"
                    Visibility="{Binding CpuCount, Converter={StaticResource NotEmptyToVis}}" />

@@ -40,4 +40,8 @@ public sealed record AppSettings
 
     /// <summary>Also auto-save runs where only discovery ran (no inventory). Off = inventoried runs only.</summary>
     public bool AutoSaveDiscoveryOnly { get; init; } = true;
+
+    /// <summary>Compliance rules the operator toggled away from their pack default (rule id → enabled). Deltas
+    /// only, same pattern as <see cref="CollectorOverrides"/>. Null/empty = pack defaults.</summary>
+    public Dictionary<string, bool>? ComplianceRuleOverrides { get; init; }
 }

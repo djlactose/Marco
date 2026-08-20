@@ -1,0 +1,69 @@
+<Window x:Class="Marco.App.Views.FleetHealthWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Fleet health — Marco" Height="560" Width="640" WindowStartupLocation="CenterOwner"
+        Background="White">
+  <Grid Margin="12">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0" Margin="0,0,0,8">
+      <TextBlock Text="{Binding SummaryText}" FontWeight="SemiBold" FontSize="15" />
+      <TextBlock Text="{Binding CountsText}" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,2,0,0" />
+    </StackPanel>
+
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+      <StackPanel>
+        <TextBlock Text="Top issues" Style="{StaticResource SectionHeader}" />
+        <TextBlock Text="No rule failures across the evaluated machines." Foreground="{StaticResource MutedBrush}"
+                   Visibility="{Binding NoIssues, Converter={StaticResource BoolToVis}}" Margin="0,0,0,6" />
+        <ItemsControl ItemsSource="{Binding Issues}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Grid Margin="0,1">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="70" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="{Binding SeverityBrush}" CornerRadius="2" Padding="4,1"
+                        HorizontalAlignment="Left" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Severity}" FontSize="10" Foreground="White" />
+                </Border>
+                <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" Margin="8,0" />
+                <TextBlock Grid.Column="2" Text="{Binding CountText}" VerticalAlignment="Center"
+                           Foreground="{StaticResource MutedBrush}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Per-rule enable/disable; thresholds and custom rules live in Marco.Data\compliance\*.json. -->
+        <Expander Margin="0,12,0,0" IsExpanded="False">
+          <Expander.Header>
+            <TextBlock Text="Rules (untick to exclude from evaluation)" FontWeight="SemiBold" />
+          </Expander.Header>
+          <StackPanel Margin="4,4,0,0">
+            <TextBlock Text="Changes apply when this window closes. For thresholds or your own rules, drop a pack into Marco.Data\compliance\ — see the default pack's description."
+                       TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,0,0,4" />
+            <ItemsControl ItemsSource="{Binding RuleToggles}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <CheckBox IsChecked="{Binding IsEnabled}" Margin="0,2" ToolTip="{Binding Description}">
+                    <TextBlock><Run Text="{Binding Name, Mode=OneWay}" /><Run Text="{Binding SeverityText, Mode=OneWay}" Foreground="Gray" /></TextBlock>
+                  </CheckBox>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Expander>
+      </StackPanel>
+    </ScrollViewer>
+
+    <TextBlock Grid.Row="2" Margin="0,8,0,0" FontSize="11" Foreground="{StaticResource MutedBrush}"
+               Text="Unknown never counts against a machine; scores weigh Critical 8 · High 4 · Medium 2 · Low 1." />
+  </Grid>
+</Window>
