@@ -50,7 +50,32 @@ that only exist on some SKUs — Security Center on client Windows, BitLocker on
 Management classes on Windows 8 / Server 2012 and later — are reported as "not available" notes rather than
 failures.
 
-The itemization tool, HTML/SQLite export, AD browse, and saved-scan history are planned for later phases.
+## Beyond a single scan
+
+Marco keeps and reasons about scans, not just runs them:
+
+- **Scan history & compare** — every completed run is auto-saved (gzipped) to the `scans\` folder and listed in
+  the left panel. **Compare…** diffs the current grid against an earlier run by serial/MAC (so DHCP churn reads as
+  an address change, not a new machine), flagging software added/removed, security posture regressions, new local
+  admins, and hardware swaps.
+- **Compliance & fleet health** — ~22 opinionated rules over the collected posture (BitLocker, SMB1, firewall,
+  RDP+NLA, Secure Boot, TPM 2.0, LAPS, patch age, OS end-of-support…) give a per-host score and a fleet rollup.
+  Null inputs read *unknown*, never *fail*. Extend or retune with your own JSON packs in `Marco.Data\compliance\`.
+- **Lifecycle / EOL** — a bundled table flags operating systems past or nearing end of support, plus approximate
+  hardware age from the BIOS date (refresh with `build\refresh-eol.ps1`).
+- **Known-device baseline** — bless a scan as the set of known devices; later scans flag anything new (a rogue
+  Raspberry Pi jumps out), with a *NEW?* state for Wi-Fi MAC randomization that inventory resolves.
+- **Prerequisite doctor** — when inventory fails, a per-host "why" with a copy-paste fix, and a fleet rollup
+  grouping hosts by cause (firewall, token filtering, Remote Registry, SSH…). Emits text only, never runs it.
+- **Client profiles** — bundle an engagement's targets, scoped credentials, and report branding; sharable as a
+  `.marcoclient.json` that never carries credentials.
+- **Per-host actions & Wake-on-LAN** — right-click for RDP/SSH/web-admin/C$/ping (only where the evidence fits),
+  and wake asleep hosts by MAC before a scan.
+- **Branded assessment report** — one-click client-ready HTML (executive summary, compliance donut, prioritized
+  findings, asset appendix); print to PDF.
+- **Headless CLI** — `Marco.exe scan …` for Task Scheduler (see *Scheduled / headless scans* below).
+
+The itemization tool (cross-machine query), SQLite export, and AD browse remain planned for later phases.
 
 ---
 
