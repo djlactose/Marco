@@ -180,6 +180,8 @@ public partial class MainViewModel : ObservableObject
             Interval = TimeSpan.FromSeconds(1),
         };
         _inventoryStatusTimer.Tick += (_, _) => RefreshScanStatus();
+
+        _ = RefreshHistoryAsync(); // populate the scan-history expander in the background
     }
 
     /// <summary>Seed the observable backing fields directly: during construction nothing observes yet, and the
@@ -200,6 +202,9 @@ public partial class MainViewModel : ObservableObject
         _groupByBlock = s.GroupByBlock;
         _includeBetaSetting = s.IncludeBetaUpdates;
         _includeBetaUpdates = s.IncludeBetaUpdates ?? Marco.Core.AppVersion.IsBeta;
+        _autoSaveScans = s.AutoSaveScans;
+        _scanHistoryLimit = Math.Max(1, s.ScanHistoryLimit);
+        _autoSaveDiscoveryOnly = s.AutoSaveDiscoveryOnly;
         BuildCollectorOptions(s.CollectorOverrides);
     }
 #pragma warning restore MVVMTK0034
@@ -219,6 +224,9 @@ public partial class MainViewModel : ObservableObject
         AutoInventory = AutoInventory,
         GroupByBlock = GroupByBlock,
         CollectorOverrides = CollectorCatalog.OverridesFor(EnabledCollectorNames()),
+        AutoSaveScans = _autoSaveScans,
+        ScanHistoryLimit = _scanHistoryLimit,
+        AutoSaveDiscoveryOnly = _autoSaveDiscoveryOnly,
     });
 
     partial void OnFilterTextChanged(string value) => MachinesView.Refresh();
@@ -319,6 +327,7 @@ public partial class MainViewModel : ObservableObject
         }
 
         LastRanges = ranges;
+        _currentRunId = Marco.Export.History.ScanHistoryStore.NewRunId(DateTime.Now);
         CloseDetailWindows(); // their machines are about to leave the grid
         Machines.Clear();
         SelectedMachine = null;
@@ -389,11 +398,14 @@ public partial class MainViewModel : ObservableObject
             }
 
             // Chain straight into inventory when requested (after discovery's own cleanup has run).
-            if (discoveryCompleted && AutoInventory)
+            if (discoveryCompleted && AutoInventory && Machines.Any(m => m.IsAlive))
             {
-                var alive = Machines.Where(m => m.IsAlive).ToList();
-                if (alive.Count > 0)
-                    await RunInventoryAsync(alive);
+                await RunInventoryAsync(Machines.Where(m => m.IsAlive).ToList());
+                // RunInventoryAsync saved the run (phase Inventoried) on success; nothing more to do here.
+            }
+            else if (discoveryCompleted)
+            {
+                SaveRunToHistory(Marco.Export.History.ScanHistoryPhase.DiscoveryOnly);
             }
         }
         finally
@@ -423,6 +435,7 @@ public partial class MainViewModel : ObservableObject
         InventoryAliveCommand.NotifyCanExecuteChanged();
         InventorySelectedCommand.NotifyCanExecuteChanged();
         OpenScanCommand.NotifyCanExecuteChanged();
+        OpenHistoryEntryCommand.NotifyCanExecuteChanged();
         AddCredentialCommand.NotifyCanExecuteChanged();
         RemoveCredentialCommand.NotifyCanExecuteChanged();
         EditCredentialCommand.NotifyCanExecuteChanged();
@@ -565,6 +578,7 @@ public partial class MainViewModel : ObservableObject
         Machines.Clear();
         SelectedMachine = null;
         LastRanges = Array.Empty<string>();
+        _currentRunId = null;
         AliveCount = UnreachableCount = TotalCount = 0;
         ProgressFraction = 0;
         StatusLine = "Cleared.";

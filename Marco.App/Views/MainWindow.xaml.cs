@@ -28,6 +28,23 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnHistoryListDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        var list = (ListBox)sender;
+        var node = e.OriginalSource as DependencyObject;
+        while (node is not null and not ListBoxItem)
+        {
+            if (node is Button) return; // the ✕ delete button — not an open gesture
+            node = node is Visual ? VisualTreeHelper.GetParent(node) : LogicalTreeHelper.GetParent(node);
+        }
+        if (node is ListBoxItem { DataContext: HistoryEntryDisplay entry }
+            && list.DataContext is MainViewModel vm
+            && vm.OpenHistoryEntryCommand.CanExecute(entry))
+        {
+            vm.OpenHistoryEntryCommand.Execute(entry);
+        }
+    }
+
     private void OnCredentialListDoubleClick(object sender, MouseButtonEventArgs e)
     {
         var list = (ListBox)sender;

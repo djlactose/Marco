@@ -25,6 +25,9 @@ public class SettingsStoreTests
                 ResolveMac = false,
                 IncludeUnreachable = true,
                 AutoInventory = true,
+                AutoSaveScans = false,
+                ScanHistoryLimit = 12,
+                AutoSaveDiscoveryOnly = false,
             };
             SettingsStore.Save(path, settings);
             var loaded = SettingsStore.Load(path);
@@ -52,6 +55,24 @@ public class SettingsStoreTests
         {
             File.WriteAllText(path, "{ not valid json !!");
             Assert.Equal(new AppSettings(), SettingsStore.Load(path));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void OlderSettingsFile_GetsScanHistoryDefaults()
+    {
+        var path = TempFile();
+        try
+        {
+            // A settings.json written before the scan-history feature existed.
+            File.WriteAllText(path, """{ "TargetsText": "10.0.0.0/24", "Concurrency": 16 }""");
+            var loaded = SettingsStore.Load(path);
+
+            Assert.True(loaded.AutoSaveScans);
+            Assert.Equal(30, loaded.ScanHistoryLimit);
+            Assert.True(loaded.AutoSaveDiscoveryOnly);
+            Assert.Equal("10.0.0.0/24", loaded.TargetsText); // old fields still honoured
         }
         finally { File.Delete(path); }
     }

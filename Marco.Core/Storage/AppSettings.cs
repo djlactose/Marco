@@ -31,4 +31,13 @@ public sealed record AppSettings
     /// Only the differences are stored, so a collector added in a later version appears with its own default
     /// (see <see cref="Inventory.CollectorCatalog"/>). Null/empty = all defaults.</summary>
     public Dictionary<string, bool>? CollectorOverrides { get; init; }
+
+    /// <summary>Automatically keep a copy of every completed run in the scans folder (see ScanHistoryStore).</summary>
+    public bool AutoSaveScans { get; init; } = true;
+
+    /// <summary>Auto-saved runs kept before the oldest are pruned. Not validated here; the store clamps to ≥ 1.</summary>
+    public int ScanHistoryLimit { get; init; } = 30;
+
+    /// <summary>Also auto-save runs where only discovery ran (no inventory). Off = inventoried runs only.</summary>
+    public bool AutoSaveDiscoveryOnly { get; init; } = true;
 }

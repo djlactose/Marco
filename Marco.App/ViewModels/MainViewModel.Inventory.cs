@@ -335,6 +335,7 @@ public partial class MainViewModel
 
             StatusLine = $"Inventory complete. {authed}/{targets.Count} authenticated in {sw.Elapsed.TotalSeconds:0.0}s."
                 + (skipped > 0 ? $" Skipped {skipped} printer/network device(s)." : "");
+            SaveRunToHistory(Marco.Export.History.ScanHistoryPhase.Inventoried);
         }
         catch (OperationCanceledException)
         {
@@ -384,7 +385,7 @@ public partial class MainViewModel
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
             Title = "Open a saved scan",
-            Filter = "JSON scan files (*.json)|*.json|All files (*.*)|*.*",
+            Filter = "JSON scan files (*.json;*.json.gz)|*.json;*.json.gz|All files (*.*)|*.*",
             InitialDirectory = _paths.ExportsDirectory,
             CheckFileExists = true,
         };
@@ -393,30 +394,39 @@ public partial class MainViewModel
         try
         {
             var doc = new JsonExporter().Load(dialog.FileName);
-            CloseDetailWindows(); // their machines are about to leave the grid
-            Machines.Clear();
-            SelectedMachine = null;
-            var ranges = doc.Metadata.RangesScanned ?? Array.Empty<string>();
-            foreach (var machine in doc.ToMachines())
-            {
-                // Files from before per-row block information: place each host in the range that covers it.
-                machine.TargetBlock ??= Marco.Core.Targets.TargetParser.FindBlock(ranges, machine.Address) ?? "Other";
-                Machines.Add(machine);
-            }
-
-            AliveCount = Machines.Count(m => m.IsAlive);
-            UnreachableCount = Machines.Count - AliveCount;
-            TotalCount = doc.Metadata.TotalTargets > 0 ? doc.Metadata.TotalTargets : Machines.Count;
-            LastRanges = doc.Metadata.RangesScanned?.ToList() ?? new List<string>();
-            ProgressFraction = 0;
-            StatusLine = $"Loaded scan from {Path.GetFileName(dialog.FileName)} ({doc.Metadata.Timestamp:g}).";
-            InventoryAliveCommand.NotifyCanExecuteChanged();
+            LoadScanDocument(doc, Path.GetFileName(dialog.FileName));
         }
         catch (Exception ex)
         {
             MessageBox.Show($"Could not open the scan:\n{ex.Message}",
                 "Open scan", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    /// <summary>Put a loaded document into the grid — shared by "Open scan…" and the scan-history list. Clears
+    /// the current-run id: this grid is a restored snapshot, so a later inventory saves as a NEW history entry
+    /// instead of overwriting the original.</summary>
+    private void LoadScanDocument(ScanDocument doc, string sourceName)
+    {
+        CloseDetailWindows(); // their machines are about to leave the grid
+        Machines.Clear();
+        SelectedMachine = null;
+        _currentRunId = null;
+        var ranges = doc.Metadata.RangesScanned ?? Array.Empty<string>();
+        foreach (var machine in doc.ToMachines())
+        {
+            // Files from before per-row block information: place each host in the range that covers it.
+            machine.TargetBlock ??= Marco.Core.Targets.TargetParser.FindBlock(ranges, machine.Address) ?? "Other";
+            Machines.Add(machine);
+        }
+
+        AliveCount = Machines.Count(m => m.IsAlive);
+        UnreachableCount = Machines.Count - AliveCount;
+        TotalCount = doc.Metadata.TotalTargets > 0 ? doc.Metadata.TotalTargets : Machines.Count;
+        LastRanges = doc.Metadata.RangesScanned?.ToList() ?? new List<string>();
+        ProgressFraction = 0;
+        StatusLine = $"Loaded scan from {sourceName} ({doc.Metadata.Timestamp:g}).";
+        InventoryAliveCommand.NotifyCanExecuteChanged();
     }
 
     private bool CanOpenScan() => !IsRunning;

@@ -240,6 +240,47 @@
               </ItemsControl>
             </Expander>
 
+            <!-- Saved runs, newest first: completed scans are auto-saved (gzip) into Marco.Data\scans. -->
+            <Expander Margin="0,8,0,0" IsExpanded="False"
+                      ToolTip="Completed runs are saved here automatically. Double-click one to reopen it.">
+              <Expander.Header>
+                <TextBlock Text="{Binding HistorySummary}" FontWeight="SemiBold" />
+              </Expander.Header>
+              <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Background="White"
+                      MinHeight="40" MaxHeight="180" Margin="4,4,0,0">
+                <ListBox ItemsSource="{Binding History}" BorderThickness="0"
+                         MouseDoubleClick="OnHistoryListDoubleClick">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate>
+                      <Grid Background="Transparent" ToolTip="{Binding ToolTipText}">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="*" />
+                          <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                          <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding TimeText}" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
+                            <Border Background="{StaticResource TagBackgroundBrush}" CornerRadius="2" Padding="4,0" Margin="6,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding PhaseTag, Converter={StaticResource NotEmptyToVis}}">
+                              <TextBlock Text="{Binding PhaseTag}" FontSize="10" Foreground="{StaticResource AccentBrush}" />
+                            </Border>
+                          </StackPanel>
+                          <TextBlock FontSize="11" Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis">
+                            <Run Text="{Binding RangesText, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding CountsText, Mode=OneWay}" />
+                          </TextBlock>
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="✕" Padding="4,0" MinWidth="0" Margin="4,0,0,0"
+                                ToolTip="Delete this saved scan"
+                                Command="{Binding DataContext.DeleteHistoryEntryCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                CommandParameter="{Binding}" />
+                      </Grid>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+              </Border>
+            </Expander>
+
             <Separator Margin="0,14" />
 
             <!-- Enablement is driven by each command's CanExecute (IsRunning / IsCancelling), not by IsEnabled
