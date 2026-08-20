@@ -338,6 +338,7 @@ public partial class MainViewModel
                 + (skipped > 0 ? $" Skipped {skipped} printer/network device(s)." : "");
             SaveRunToHistory(Marco.Export.History.ScanHistoryPhase.Inventoried);
             ReportDoctorFindings(targets);
+            EvaluateBaseline(); // serials just arrived — weak matches can upgrade to Known
             _ = EvaluateComplianceAsync();
         }
         catch (OperationCanceledException)
@@ -461,6 +462,7 @@ public partial class MainViewModel
         HasDoctorFindings = Marco.Core.Diagnosis.PrereqDoctor.Rollup(Machines).Count > 0;
         StatusLine = $"Loaded scan from {sourceName} ({doc.Metadata.Timestamp:g}).";
         InventoryAliveCommand.NotifyCanExecuteChanged();
+        EvaluateBaseline();
         _ = EvaluateComplianceAsync(); // re-graded against the CURRENT packs, not whatever the file carried
     }
 

@@ -59,6 +59,18 @@ public enum ConnectFailure
     SshUnreachable,
 }
 
+/// <summary>How a host relates to the blessed known-device baseline (see Marco.Core.Baseline). Transient —
+/// evaluated per scan against the current baseline, never serialized.</summary>
+public enum BaselineStatus
+{
+    NotEvaluated = 0,
+    Known,
+    Unknown,
+    /// <summary>Only weak identity evidence (randomized MAC, or bare address) — possibly a known device whose
+    /// Wi-Fi rotates its MAC; inventorying it recovers the serial and settles the question.</summary>
+    UnknownWeak,
+}
+
 /// <summary>Where an installed-software entry came from.</summary>
 public enum SoftwareSource
 {

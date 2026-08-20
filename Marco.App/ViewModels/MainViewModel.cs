@@ -266,6 +266,7 @@ public partial class MainViewModel : ObservableObject
 
         return Contains(m.Address, f)
             || Contains(m.Name, f)
+            || Contains(m.BaselineTag, f) // "NEW" narrows to unknown devices
             || Contains(m.Fqdn, f)
             || Contains(m.Vendor, f)
             || Contains(m.DeviceType.ToString(), f)
@@ -412,6 +413,7 @@ public partial class MainViewModel : ObservableObject
             else if (discoveryCompleted)
             {
                 SaveRunToHistory(Marco.Export.History.ScanHistoryPhase.DiscoveryOnly);
+                EvaluateBaseline(); // the auto-inventory path re-evaluates itself on completion
             }
         }
         finally
@@ -444,6 +446,7 @@ public partial class MainViewModel : ObservableObject
         OpenHistoryEntryCommand.NotifyCanExecuteChanged();
         CompareCommand.NotifyCanExecuteChanged();
         CompareWithCurrentCommand.NotifyCanExecuteChanged();
+        BlessCurrentAsBaselineCommand.NotifyCanExecuteChanged();
         AddCredentialCommand.NotifyCanExecuteChanged();
         RemoveCredentialCommand.NotifyCanExecuteChanged();
         EditCredentialCommand.NotifyCanExecuteChanged();
@@ -589,6 +592,7 @@ public partial class MainViewModel : ObservableObject
         _currentRunId = null;
         HasDoctorFindings = false;
         FleetComplianceText = null;
+        UnknownDevicesText = null;
         AliveCount = UnreachableCount = TotalCount = 0;
         ProgressFraction = 0;
         StatusLine = "Cleared.";

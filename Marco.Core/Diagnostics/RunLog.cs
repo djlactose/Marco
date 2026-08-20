@@ -51,6 +51,9 @@ public sealed class RunLog
     /// Counts only — no hostnames, to keep the log small and unrevealing.</summary>
     public void Doctor(IReadOnlyDictionary<string, int> causeCounts) => Write("doctor", new { causes = causeCounts });
 
+    /// <summary>Baseline lifecycle: blessed / trusted / evaluated, with counts only.</summary>
+    public void Baseline(string action, int known, int unknown) => Write("baseline", new { action, known, unknown });
+
     /// <summary>Unhandled exception, from the dispatcher, appdomain, or task scheduler.</summary>
     public void Crash(string source, string detail) => Write("crash", new { source, detail });
 

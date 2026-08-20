@@ -154,6 +154,24 @@ public sealed class Machine : ObservableBase
     /// <summary>"EOL 2025-10" / "ends 2026-11" / "OK" for the grid's OS EOL column.</summary>
     public string? LifecycleDisplay => _lifecycle?.Display;
 
+    private BaselineStatus _baselineStatus;
+    /// <summary>Standing vs the known-device baseline. Transient like CurrentActivity — re-evaluated per scan,
+    /// no MachineDto field.</summary>
+    public BaselineStatus BaselineStatus
+    {
+        get => _baselineStatus;
+        set { if (Set(ref _baselineStatus, value)) Raise(nameof(BaselineTag)); }
+    }
+
+    /// <summary>"✓" / "NEW" / "NEW?" for the grid's Known column.</summary>
+    public string? BaselineTag => _baselineStatus switch
+    {
+        BaselineStatus.Known => "✓",
+        BaselineStatus.Unknown => "NEW",
+        BaselineStatus.UnknownWeak => "NEW?",
+        _ => null,
+    };
+
     // Scalar groups. Settable so a reopened scan can hand its deserialized object straight over; the detail
     // pane re-reads them through NotifyInventoryUpdated like System/Os.
     private UpdateInfo _updates = new();

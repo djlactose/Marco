@@ -59,6 +59,8 @@ public sealed class AppPaths
 
     public string LogFile => Path.Combine(LogsDirectory, "marco.log");
     public string RunLogFile => Path.Combine(LogsDirectory, "runlog.jsonl");
+    /// <summary>The blessed known-device baseline (see Marco.Core.Baseline).</summary>
+    public string BaselineFile => Path.Combine(Root, "baseline.json");
 
     private string Sub(string name)
     {

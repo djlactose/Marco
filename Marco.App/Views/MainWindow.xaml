@@ -88,6 +88,10 @@
         <TextBlock Grid.Column="0" Text="{Binding StatusLine}" VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+          <TextBlock Text="{Binding UnknownDevicesText}" Foreground="#B8860B" FontWeight="SemiBold"
+                     VerticalAlignment="Center" Margin="0,0,12,0"
+                     Visibility="{Binding UnknownDevicesText, Converter={StaticResource NotEmptyToVis}}"
+                     ToolTip="Devices not in the blessed baseline. Filter the grid with 'NEW' to see them; right-click a row to trust it." />
           <Button Content="{Binding FleetComplianceText}" Command="{Binding OpenFleetHealthCommand}"
                   Padding="8,2" MinWidth="0" Margin="0,0,12,0"
                   Visibility="{Binding FleetComplianceText, Converter={StaticResource NotEmptyToVis}}"
@@ -274,6 +278,9 @@
                             <MenuItem Header="Compare with previous run"
                                       Command="{Binding PlacementTarget.Tag.CompareWithPreviousCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                       CommandParameter="{Binding}" />
+                            <MenuItem Header="Use as known-device baseline"
+                                      Command="{Binding PlacementTarget.Tag.BlessHistoryEntryAsBaselineCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                      CommandParameter="{Binding}" />
                             <Separator />
                             <MenuItem Header="Delete"
                                       Command="{Binding PlacementTarget.Tag.DeleteHistoryEntryCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
@@ -438,6 +445,17 @@
           <DataGrid.InputBindings>
             <KeyBinding Key="Return" Command="{Binding OpenMachineDetailCommand}" />
           </DataGrid.InputBindings>
+          <!-- Baseline actions (a ContextMenu inherits the grid's DataContext = the VM). -->
+          <DataGrid.ContextMenu>
+            <ContextMenu>
+              <MenuItem Header="Trust this device (add to baseline)"
+                        Command="{Binding TrustDeviceCommand}" CommandParameter="{Binding SelectedMachine}" />
+              <MenuItem Header="Trust all unknown devices" Command="{Binding TrustAllUnknownCommand}" />
+              <Separator />
+              <MenuItem Header="Bless current results as baseline" Command="{Binding BlessCurrentAsBaselineCommand}"
+                        ToolTip="Future scans flag devices not in this set as NEW" />
+            </ContextMenu>
+          </DataGrid.ContextMenu>
           <!-- One collapsible section per target block (see MainViewModel.ApplyGrouping). -->
           <DataGrid.GroupStyle>
             <GroupStyle>
@@ -485,6 +503,25 @@
             <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="140" />
             <DataGridTextColumn Header="Type" Binding="{Binding DeviceType}" Width="100" />
             <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90" />
+            <DataGridTextColumn Header="Known" Binding="{Binding BaselineTag}" Width="55">
+              <DataGridTextColumn.ElementStyle>
+                <Style TargetType="TextBlock">
+                  <Setter Property="HorizontalAlignment" Value="Center" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding BaselineTag}" Value="NEW">
+                      <Setter Property="Background" Value="#FFF3CD" />
+                      <Setter Property="FontWeight" Value="SemiBold" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding BaselineTag}" Value="NEW?">
+                      <Setter Property="Background" Value="#FFF8E1" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding BaselineTag}" Value="✓">
+                      <Setter Property="Foreground" Value="SeaGreen" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </DataGridTextColumn.ElementStyle>
+            </DataGridTextColumn>
             <DataGridTextColumn Header="Activity" Binding="{Binding CurrentActivity}" Width="170" />
             <DataGridTextColumn Header="Vendor" Binding="{Binding Vendor}" Width="130" />
             <DataGridTextColumn Header="MAC" Binding="{Binding PrimaryMac}" Width="130" />

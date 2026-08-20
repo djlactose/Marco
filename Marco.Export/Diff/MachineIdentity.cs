@@ -13,14 +13,6 @@ namespace Marco.Export.Diff;
 /// </summary>
 public static class MachineIdentity
 {
-    private static readonly HashSet<string> BogusSerials = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "", "0", "1", "none", "invalid", "n/a", "na", "unknown", "default string",
-        "to be filled by o.e.m.", "to be filled by oem", "system serial number",
-        "chassis serial number", "not specified", "not available", "no serial", "empty",
-        "0123456789", "1234567890", "123456789",
-    };
-
     public sealed record IdentityMatch(Marco.Export.MachineDto Older, Marco.Export.MachineDto Newer, MatchKind MatchedBy);
 
     public sealed record MatchResult(
@@ -68,22 +60,10 @@ public static class MachineIdentity
         m.Address, m.Name, NormalizeSerial(m.System.SerialNumber),
         m.MacAddresses.FirstOrDefault(), matchedBy);
 
-    /// <summary>Null when the value is an OEM placeholder rather than a real serial.</summary>
-    public static string? NormalizeSerial(string? serial)
-    {
-        var s = serial?.Trim();
-        return s is null || BogusSerials.Contains(s) ? null : s;
-    }
-
-    /// <summary>Second nibble 2/6/A/E — a locally-administered address, i.e. randomized/virtual, not burned in.</summary>
-    public static bool IsLocallyAdministered(string mac)
-    {
-        var n = NormalizeMac(mac);
-        return n.Length >= 2 && n[1] is '2' or '6' or 'A' or 'E';
-    }
-
-    public static string NormalizeMac(string mac)
-        => new(mac.Where(Uri.IsHexDigit).Select(char.ToUpperInvariant).ToArray());
+    // Normalization lives in Core (HardwareIdentity) so the asset baseline applies identical rules.
+    public static string? NormalizeSerial(string? serial) => Marco.Core.Model.HardwareIdentity.NormalizeSerial(serial);
+    public static bool IsLocallyAdministered(string mac) => Marco.Core.Model.HardwareIdentity.IsLocallyAdministered(mac);
+    public static string NormalizeMac(string mac) => Marco.Core.Model.HardwareIdentity.NormalizeMac(mac);
 
     private static Dictionary<string, Marco.Export.MachineDto> UniqueSerialMap(IEnumerable<Marco.Export.MachineDto> machines)
     {
