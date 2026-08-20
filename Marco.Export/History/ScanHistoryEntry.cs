@@ -19,7 +19,8 @@ public sealed record ScanHistoryEntry(
     ScanHistoryPhase Phase,
     string AppVersion,
     string DocSchemaVersion,
-    long SizeBytes);
+    long SizeBytes,
+    string? Client = null);
 
 /// <summary>Root of <c>index.json</c>. The index is a cache of the directory, not a source of truth — see
 /// <see cref="ScanHistoryStore"/> for the reconciliation rules.</summary>

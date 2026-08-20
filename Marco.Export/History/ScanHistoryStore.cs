@@ -45,7 +45,8 @@ public sealed class ScanHistoryStore
     /// <summary>Save (or phase-upgrade) a run. Saving an id that already exists overwrites its file and index
     /// entry — that is how a discovery-only save becomes the inventoried save of the same run. Prunes the oldest
     /// entries beyond <paramref name="limit"/> afterwards, under the same lock.</summary>
-    public ScanHistoryEntry Save(ScanDocument document, string runId, ScanHistoryPhase phase, int limit = 30)
+    public ScanHistoryEntry Save(ScanDocument document, string runId, ScanHistoryPhase phase, int limit = 30,
+        string? client = null)
     {
         Directory.CreateDirectory(_directory);
         var fileName = runId + ".json.gz";
@@ -61,7 +62,7 @@ public sealed class ScanHistoryStore
             // Collector results only exist after an inventory pass; LastScanned is set by discovery too.
             document.Machines.Count(m => m.Collectors is { Count: > 0 }),
             phase, document.Metadata.Version, document.Metadata.SchemaVersion,
-            TryGetLength(path));
+            TryGetLength(path), client);
 
         WithIndex(entries =>
         {

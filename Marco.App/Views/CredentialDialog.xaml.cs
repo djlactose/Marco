@@ -16,19 +16,36 @@ public partial class CredentialDialog : Window
     private string? _verifiedSignature;
     private string? _emptyPasswordWarnedSignature;
 
+    private sealed record ClientOption(string? Id, string Display) { public override string ToString() => Display; }
+
     public CredentialDialog(CredentialVerifier? verifier = null, string? defaultHost = null,
-        CredentialKind defaultKind = CredentialKind.Windows, CredentialSet? editing = null)
+        CredentialKind defaultKind = CredentialKind.Windows, CredentialSet? editing = null,
+        IReadOnlyList<Marco.Core.Clients.ClientProfile>? clients = null, string? activeClientId = null)
     {
         InitializeComponent();
         _verifier = verifier;
         _editing = editing;
         if (!string.IsNullOrWhiteSpace(defaultHost)) TestHostBox.Text = defaultHost;
         SetupCommands.Text = TargetEnablementScript;
+
+        if (clients is { Count: > 0 })
+        {
+            ClientRow.Visibility = Visibility.Visible;
+            var options = new List<ClientOption> { new(null, "(Shared — all clients)") };
+            options.AddRange(clients.Select(c => new ClientOption(c.Id, c.Name)));
+            ClientCombo.ItemsSource = options;
+            var preselect = editing?.ClientId ?? activeClientId;
+            ClientCombo.SelectedItem = options.FirstOrDefault(o =>
+                string.Equals(o.Id, preselect, StringComparison.OrdinalIgnoreCase)) ?? options[0];
+        }
+
         if (editing is not null) LoadFrom(editing);
         else if (defaultKind == CredentialKind.Linux) LinuxModeRadio.IsChecked = true;
         ApplyMode();
         Loaded += (_, _) => LabelBox.Focus();
     }
+
+    private string? SelectedClientId => (ClientCombo.SelectedItem as ClientOption)?.Id;
 
     public CredentialDialog() : this(null, null) { }
 
@@ -82,6 +99,7 @@ public partial class CredentialDialog : Window
             {
                 Kind = CredentialKind.Linux,
                 SshPort = port,
+                ClientId = SelectedClientId,
             };
         }
         else
@@ -92,7 +110,7 @@ public partial class CredentialDialog : Window
             return new CredentialSet(label,
                 string.IsNullOrWhiteSpace(DomainBox.Text) ? null : DomainBox.Text.Trim(),
                 user, ResolvePassword())
-            { Kind = CredentialKind.Windows };
+            { Kind = CredentialKind.Windows, ClientId = SelectedClientId };
         }
     }
 

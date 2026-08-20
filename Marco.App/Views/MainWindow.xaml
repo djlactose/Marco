@@ -123,6 +123,19 @@
               BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14">
           <StackPanel>
+            <!-- Client engagement: selecting one prefills targets, scopes credentials, tags saved scans. -->
+            <TextBlock Text="Client" Style="{StaticResource SectionHeader}" />
+            <DockPanel Margin="0,0,0,10">
+              <Button DockPanel.Dock="Right" Content="Clients…" Command="{Binding OpenClientManagerCommand}"
+                      Margin="6,0,0,0" Padding="8,3" MinWidth="0"
+                      ToolTip="Add, edit, share (.marcoclient.json) or import client profiles" />
+              <Button DockPanel.Dock="Right" Content="💾" Command="{Binding SaveTargetsToClientCommand}"
+                      Margin="6,0,0,0" Padding="6,3" MinWidth="0"
+                      ToolTip="Save the current targets to the selected client" />
+              <ComboBox ItemsSource="{Binding ClientChoices}" SelectedItem="{Binding SelectedClientChoice}"
+                        DisplayMemberPath="Display" />
+            </DockPanel>
+
             <TextBlock Text="Targets" Style="{StaticResource SectionHeader}" />
             <TextBlock Text="CIDR (10.0.0.0/24), range (10.0.0.1-50), IP, or hostname — one per line."
                        TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,0,0,6" />

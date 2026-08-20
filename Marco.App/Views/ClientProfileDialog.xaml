@@ -1,0 +1,52 @@
+<Window x:Class="Marco.App.Views.ClientProfileDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Client profile" Height="520" Width="520" WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize" MinHeight="420" MinWidth="440" FontFamily="Segoe UI" FontSize="13"
+        ShowInTaskbar="False">
+  <DockPanel Margin="16">
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+      <Button x:Name="OkButton" Content="Save" Width="80" IsDefault="True" Click="OnOk" Margin="0,0,8,0" />
+      <Button Content="Cancel" Width="80" IsCancel="True" />
+    </StackPanel>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+      <StackPanel>
+        <DockPanel Margin="0,4">
+          <TextBlock Text="Client name" Width="110" VerticalAlignment="Center" />
+          <TextBox x:Name="NameBox" />
+        </DockPanel>
+
+        <TextBlock Text="Targets (prefilled when this client is selected)" FontWeight="SemiBold" Foreground="#333" Margin="0,10,0,4" />
+        <TextBox x:Name="TargetsBox" AcceptsReturn="True" TextWrapping="NoWrap" Height="110"
+                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" FontFamily="Consolas" />
+
+        <TextBlock Text="Report branding" FontWeight="SemiBold" Foreground="#333" Margin="0,12,0,4" />
+        <DockPanel Margin="0,4">
+          <TextBlock Text="Company" Width="110" VerticalAlignment="Center" />
+          <TextBox x:Name="CompanyBox" />
+        </DockPanel>
+        <DockPanel Margin="0,4">
+          <TextBlock Text="Logo" Width="110" VerticalAlignment="Center" />
+          <Button DockPanel.Dock="Right" Content="Browse…" Click="OnBrowseLogo" Margin="6,0,0,0" Padding="8,3" MinWidth="0" />
+          <TextBox x:Name="LogoBox" ToolTip="PNG/JPG used on generated reports; embedded when the profile is exported" />
+        </DockPanel>
+        <DockPanel Margin="0,4">
+          <TextBlock Text="Accent color" Width="110" VerticalAlignment="Center" />
+          <TextBox x:Name="AccentBox" Width="110" HorizontalAlignment="Left" ToolTip="Hex, e.g. #2A6FB0" />
+        </DockPanel>
+        <DockPanel Margin="0,4">
+          <TextBlock Text="Prepared by" Width="110" VerticalAlignment="Center" />
+          <TextBox x:Name="PreparedByBox" ToolTip="Shown in the report footer (your company / team name)" />
+        </DockPanel>
+
+        <TextBlock Text="Notes" FontWeight="SemiBold" Foreground="#333" Margin="0,12,0,4" />
+        <TextBox x:Name="NotesBox" AcceptsReturn="True" TextWrapping="Wrap" Height="60"
+                 VerticalScrollBarVisibility="Auto" />
+
+        <TextBlock TextWrapping="Wrap" Foreground="#6B7280" FontSize="11" Margin="0,10,0,0"
+                   Text="Profiles never contain credentials. Assign credentials to this client from the Add/Edit credential dialog; they stay in the encrypted local store." />
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

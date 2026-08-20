@@ -9,7 +9,8 @@ namespace Marco.App.ViewModels;
 public partial class MainViewModel
 {
     private BaselineStore? _baselineStore;
-    private BaselineStore BaselineStore => _baselineStore ??= new BaselineStore(_paths.BaselineFile);
+    /// <summary>Per-client when a client is active (baseline-{id}.json); invalidated on client switch.</summary>
+    private BaselineStore BaselineStore => _baselineStore ??= new BaselineStore(_paths.BaselineFileFor(ActiveClient?.Id));
 
     /// <summary>Raised after every baseline evaluation — the seam a future notifications feature consumes.</summary>
     public event EventHandler<BaselineSummary>? BaselineEvaluated;

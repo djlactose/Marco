@@ -71,11 +71,12 @@ public partial class MainViewModel
         var doc = BuildDocument(filteredOnly: false);
         var store = HistoryStore;
         int limit = _scanHistoryLimit;
+        var client = ActiveClient?.Name;
         _ = Task.Run(() =>
         {
             try
             {
-                store.Save(doc, runId, phase, limit);
+                store.Save(doc, runId, phase, limit, client);
                 Application.Current?.Dispatcher.InvokeAsync(() => _ = RefreshHistoryAsync());
             }
             catch (Exception ex)
@@ -140,8 +141,12 @@ public partial class MainViewModel
     {
         var candidates = History.Where(h => !string.Equals(h.Entry.Id, _currentRunId, StringComparison.OrdinalIgnoreCase)).ToList();
         if (candidates.Count == 0) { StatusLine = "No earlier saved scan to compare with."; return Task.CompletedTask; }
-        var baseline = candidates.FirstOrDefault(h => h.Entry.Ranges.Intersect(LastRanges, StringComparer.OrdinalIgnoreCase).Any())
-                       ?? candidates[0];
+        // Prefer runs of the same client, then runs that scanned overlapping ranges.
+        var sameClient = candidates.Where(h =>
+            string.Equals(h.Entry.Client, ActiveClient?.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+        var pool = sameClient.Count > 0 ? sameClient : candidates;
+        var baseline = pool.FirstOrDefault(h => h.Entry.Ranges.Intersect(LastRanges, StringComparer.OrdinalIgnoreCase).Any())
+                       ?? pool[0];
         return CompareWithCurrentAsync(baseline);
     }
 

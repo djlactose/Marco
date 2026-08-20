@@ -44,4 +44,7 @@ public sealed record AppSettings
     /// <summary>Compliance rules the operator toggled away from their pack default (rule id → enabled). Deltas
     /// only, same pattern as <see cref="CollectorOverrides"/>. Null/empty = pack defaults.</summary>
     public Dictionary<string, bool>? ComplianceRuleOverrides { get; init; }
+
+    /// <summary>Active client profile id; null = no client selected.</summary>
+    public string? ActiveClientId { get; init; }
 }

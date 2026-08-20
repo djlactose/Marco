@@ -181,8 +181,12 @@ public partial class MainViewModel : ObservableObject
         };
         _inventoryStatusTimer.Tick += (_, _) => RefreshScanStatus();
 
+        LoadClients(_pendingActiveClientId);
         _ = RefreshHistoryAsync(); // populate the scan-history expander in the background
     }
+
+    /// <summary>Client id from settings, applied once the choices list exists (ctor order).</summary>
+    private string? _pendingActiveClientId;
 
     /// <summary>Seed the observable backing fields directly: during construction nothing observes yet, and the
     /// generated setters must NOT run — OnIncludeBetaUpdatesChanged would persist an explicit channel choice the
@@ -207,6 +211,7 @@ public partial class MainViewModel : ObservableObject
         _autoSaveDiscoveryOnly = s.AutoSaveDiscoveryOnly;
         _complianceOverrides = s.ComplianceRuleOverrides;
         _rules = null;
+        _pendingActiveClientId = s.ActiveClientId;
         BuildCollectorOptions(s.CollectorOverrides);
     }
 #pragma warning restore MVVMTK0034
@@ -230,6 +235,7 @@ public partial class MainViewModel : ObservableObject
         ScanHistoryLimit = _scanHistoryLimit,
         AutoSaveDiscoveryOnly = _autoSaveDiscoveryOnly,
         ComplianceRuleOverrides = _complianceOverrides,
+        ActiveClientId = ActiveClient?.Id,
     });
 
     partial void OnFilterTextChanged(string value) => MachinesView.Refresh();

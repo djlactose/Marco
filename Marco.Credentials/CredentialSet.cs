@@ -25,6 +25,11 @@ public sealed class CredentialSet : IDisposable
     /// <summary>SSH port for Linux credentials.</summary>
     public int SshPort { get; set; } = 22;
 
+    /// <summary>Client profile this credential belongs to; null = shared (tried for every client). Scans scope
+    /// candidates to the active client's sets plus the shared ones — another client's credentials are never
+    /// sprayed at this client's network.</summary>
+    public string? ClientId { get; set; }
+
     public CredentialSet(string label, string? domain, string? username, SecureString? password, bool isCurrentToken = false)
     {
         Label = label;

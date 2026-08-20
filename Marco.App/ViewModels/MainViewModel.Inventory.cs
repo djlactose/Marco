@@ -39,7 +39,8 @@ public partial class MainViewModel
     {
         // Open in the mode matching the selected host, so "select a Linux box → Add credential" lands on SSH.
         var kind = SelectedMachine?.DeviceType == DeviceType.UnixLinux ? CredentialKind.Linux : CredentialKind.Windows;
-        var dialog = new CredentialDialog(InventoryFactory.CreateVerifier(), SelectedMachine?.Address, kind)
+        var dialog = new CredentialDialog(InventoryFactory.CreateVerifier(), SelectedMachine?.Address, kind,
+            clients: ClientStore.Load(), activeClientId: ActiveClient?.Id)
         {
             Owner = Application.Current.MainWindow,
         };
@@ -79,7 +80,8 @@ public partial class MainViewModel
             if (display is null) { StatusLine = "That credential was removed by another Marco window."; return; }
         }
         var dialog = new CredentialDialog(InventoryFactory.CreateVerifier(), SelectedMachine?.Address,
-            display.Set.Kind, editing: display.Set)
+            display.Set.Kind, editing: display.Set,
+            clients: ClientStore.Load(), activeClientId: ActiveClient?.Id)
         {
             Owner = Application.Current.MainWindow,
         };
@@ -167,7 +169,8 @@ public partial class MainViewModel
 
     private IReadOnlyList<CredentialCandidate> ResolveCandidates()
     {
-        var candidates = _credentials.ToCandidates();
+        // Scoped to the active client: its sets first, then shared ones; other clients' sets never leave home.
+        var candidates = _credentials.ToCandidatesFor(ActiveClient?.Id);
         return candidates.Count > 0
             ? candidates
             : new[] { CredentialSet.CurrentToken().ToCandidate() }; // Windows-kind, so Linux hosts report "no SSH credentials"

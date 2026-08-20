@@ -72,10 +72,25 @@ public sealed class CredentialStore : IDisposable
         lock (_lock) return _sets.Select(s => s.ToCandidate()).ToList();
     }
 
+    /// <summary>Candidates scoped to a client: that client's sets first (their order preserved), then the shared
+    /// ones. Sets bound to OTHER clients are excluded entirely — their credentials never touch this network.
+    /// Null client = shared sets only.</summary>
+    public IReadOnlyList<CredentialCandidate> ToCandidatesFor(string? clientId)
+    {
+        lock (_lock)
+        {
+            var scoped = _sets.Where(s => s.ClientId is not null
+                && string.Equals(s.ClientId, clientId, StringComparison.OrdinalIgnoreCase));
+            var shared = _sets.Where(s => s.ClientId is null);
+            return scoped.Concat(shared).Select(s => s.ToCandidate()).ToList();
+        }
+    }
+
     // --- DPAPI persistence ---
 
     private sealed record PersistedEntry(string Label, string? Domain, string? Username, bool IsCurrentToken,
-        string? ProtectedPassword, Marco.Core.Inventory.CredentialKind Kind = Marco.Core.Inventory.CredentialKind.Any, int SshPort = 22);
+        string? ProtectedPassword, Marco.Core.Inventory.CredentialKind Kind = Marco.Core.Inventory.CredentialKind.Any, int SshPort = 22,
+        string? ClientId = null);
 
     /// <summary>Persist to a DPAPI-protected file scoped to the current user. Passwords are individually
     /// encrypted; nothing plaintext is written.</summary>
@@ -97,7 +112,7 @@ public sealed class CredentialStore : IDisposable
                     }
                     finally { Array.Clear(plain, 0, plain.Length); }
                 }
-                return new PersistedEntry(s.Label, s.Domain, s.Username, s.IsCurrentToken, protectedPwd, s.Kind, s.SshPort);
+                return new PersistedEntry(s.Label, s.Domain, s.Username, s.IsCurrentToken, protectedPwd, s.Kind, s.SshPort, s.ClientId);
             }).ToList();
         }
 
@@ -126,7 +141,7 @@ public sealed class CredentialStore : IDisposable
                 loaded.Add(CredentialSet.CurrentToken(e.Label));
                 continue;
             }
-            var set = new CredentialSet(e.Label, e.Domain, e.Username, null) { Kind = e.Kind, SshPort = e.SshPort };
+            var set = new CredentialSet(e.Label, e.Domain, e.Username, null) { Kind = e.Kind, SshPort = e.SshPort, ClientId = e.ClientId };
             if (e.ProtectedPassword is not null)
             {
                 try

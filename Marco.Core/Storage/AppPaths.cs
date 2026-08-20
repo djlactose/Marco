@@ -62,6 +62,16 @@ public sealed class AppPaths
     /// <summary>The blessed known-device baseline (see Marco.Core.Baseline).</summary>
     public string BaselineFile => Path.Combine(Root, "baseline.json");
 
+    /// <summary>Per-client baseline when a client is active; the global file otherwise.</summary>
+    public string BaselineFileFor(string? clientId)
+        => clientId is null ? BaselineFile : Path.Combine(Root, $"baseline-{clientId}.json");
+
+    /// <summary>Client engagement profiles (targets + branding; never credentials).</summary>
+    public string ClientsFile => Path.Combine(Root, "clients.json");
+
+    /// <summary>Logos extracted from imported .marcoclient.json files.</summary>
+    public string LogosDirectory => Sub("logos");
+
     private string Sub(string name)
     {
         var path = Path.Combine(Root, name);
