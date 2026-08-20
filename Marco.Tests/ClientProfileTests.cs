@@ -37,6 +37,61 @@ public class ClientProfileTests : IDisposable
     }
 
     [Fact]
+    public void Store_RoundTripsPerClientScanConfig()
+    {
+        var store = new ClientProfileStore(Path.Combine(_dir, "clients.json"));
+        var acme = ClientProfile.New("Acme", "10.1.0.0/24") with
+        {
+            Concurrency = 64, IcmpEnabled = false, TcpFallback = true, Classification = false,
+            ResolveNames = false, ResolveMac = true, IncludeUnreachable = true, AutoInventory = true,
+            GroupByBlock = false, CollectorOverrides = new Dictionary<string, bool> { ["UsbHistory"] = true },
+        };
+        store.Upsert(acme);
+
+        var loaded = store.Load().Single();
+        Assert.Equal(64, loaded.Concurrency);
+        Assert.False(loaded.IcmpEnabled);
+        Assert.False(loaded.Classification);
+        Assert.True(loaded.IncludeUnreachable);
+        Assert.True(loaded.AutoInventory);
+        Assert.False(loaded.GroupByBlock);
+        Assert.True(loaded.CollectorOverrides!["UsbHistory"]);
+    }
+
+    [Fact]
+    public void OldClientsFile_WithoutScanConfig_LoadsWithDefaults()
+    {
+        // A clients.json written before per-client scan config existed.
+        var path = Path.Combine(_dir, "clients.json");
+        File.WriteAllText(path, """
+            { "SchemaVersion": 1, "Profiles": [
+              { "Id": "acme", "Name": "Acme", "TargetsText": "10.1.0.0/24", "CreatedUtc": "2026-01-01T00:00:00Z" } ] }
+            """);
+        var loaded = new ClientProfileStore(path).Load().Single();
+
+        Assert.Equal(32, loaded.Concurrency);       // constructor defaults fill the missing fields
+        Assert.True(loaded.IcmpEnabled);
+        Assert.True(loaded.GroupByBlock);
+        Assert.Null(loaded.CollectorOverrides);
+    }
+
+    [Fact]
+    public void SharedFile_CarriesScanConfig_ButStillNoSecrets()
+    {
+        var profile = ClientProfile.New("Acme", "10.1.0.0/24") with { Concurrency = 48, Classification = false };
+        var exported = Path.Combine(_dir, "acme" + ClientProfileSharing.Extension);
+        ClientProfileSharing.Export(profile, exported);
+
+        var json = File.ReadAllText(exported);
+        Assert.DoesNotContain("password", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("credential", json, StringComparison.OrdinalIgnoreCase);
+
+        var imported = ClientProfileSharing.Import(exported, Path.Combine(_dir, "logos"));
+        Assert.Equal(48, imported.Concurrency);      // scan recipe travels with the shared profile
+        Assert.False(imported.Classification);
+    }
+
+    [Fact]
     public void Store_ConcurrentUpserts_BothSurvive()
     {
         var path = Path.Combine(_dir, "clients.json");

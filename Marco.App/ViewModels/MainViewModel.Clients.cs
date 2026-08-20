@@ -4,10 +4,14 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marco.App.Views;
 using Marco.Core.Clients;
+using Marco.Core.Inventory;
+using Marco.Core.Scanning;
+using Marco.Core.Storage;
 
 namespace Marco.App.ViewModels;
 
-/// <summary>One row of the client dropdown; a null <see cref="Profile"/> is the "(No client)" choice.</summary>
+/// <summary>One row of the client dropdown; a null <see cref="Profile"/> is the "(No client)" choice, which is
+/// itself a saved profile (its scan config lives in settings.json).</summary>
 public sealed class ClientChoice
 {
     public ClientProfile? Profile { get; }
@@ -28,10 +32,81 @@ public partial class MainViewModel
 
     public ClientProfile? ActiveClient => SelectedClientChoice?.Profile;
 
-    /// <summary>True while programmatic selection (startup restore, list refresh) is in flight — the change
-    /// hook must not prompt about targets or persist settings during those.</summary>
+    /// <summary>The client combo is disabled during a run — switching clears the grid, which mustn't happen mid-scan.</summary>
+    public bool ClientSwitchEnabled => !IsRunning;
+
+    /// <summary>Id of the profile whose scan config is currently live in the VM (null = "(No client)"). Distinct
+    /// from the newly-selected choice, so the switch handler can persist the OLD profile before loading the new.</summary>
+    private string? _activeProfileId;
+
+    /// <summary>The "(No client)" profile's scan config, preserved so a client being active never overwrites it in
+    /// settings.json. Seeded from AppSettings; updated whenever "(No client)" is the active profile.</summary>
+    private ScanConfig _noClientConfig = ScanConfig.Defaults;
+
+    /// <summary>True while a client selection is being restored/refreshed programmatically — the switch handler
+    /// must not clear the grid or persist during those.</summary>
     private bool _restoringClient;
 
+    /// <summary>The full per-profile scan configuration: targets, discovery toggles, concurrency, collectors.</summary>
+    private sealed record ScanConfig(
+        string TargetsText, int Concurrency, bool Icmp, bool Tcp, bool Classify, bool Names, bool Mac,
+        bool IncludeUnreachable, bool AutoInv, bool Group, Dictionary<string, bool>? Collectors)
+    {
+        public static ScanConfig Defaults => new("", 32, true, true, true, true, true, false, false, true, null);
+    }
+
+    private ScanConfig CaptureScanConfig() => new(
+        TargetsText, Concurrency, IcmpEnabled, TcpFallback, Classification, ResolveNames, ResolveMac,
+        IncludeUnreachable, AutoInventory, GroupByBlock, CollectorCatalog.OverridesFor(EnabledCollectorNames()));
+
+    private void ApplyScanConfig(ScanConfig c)
+    {
+        TargetsText = c.TargetsText;
+        Concurrency = c.Concurrency;
+        IcmpEnabled = c.Icmp;
+        TcpFallback = c.Tcp;
+        Classification = c.Classify;
+        ResolveNames = c.Names;
+        ResolveMac = c.Mac;
+        IncludeUnreachable = c.IncludeUnreachable;
+        AutoInventory = c.AutoInv;
+        GroupByBlock = c.Group;
+        BuildCollectorOptions(c.Collectors);
+    }
+
+    private static ScanConfig FromClient(ClientProfile p) => new(
+        p.TargetsText, p.Concurrency, p.IcmpEnabled, p.TcpFallback, p.Classification, p.ResolveNames,
+        p.ResolveMac, p.IncludeUnreachable, p.AutoInventory, p.GroupByBlock, p.CollectorOverrides);
+
+    private static ClientProfile WithScanConfig(ClientProfile p, ScanConfig c) => p with
+    {
+        TargetsText = c.TargetsText, Concurrency = c.Concurrency, IcmpEnabled = c.Icmp, TcpFallback = c.Tcp,
+        Classification = c.Classify, ResolveNames = c.Names, ResolveMac = c.Mac,
+        IncludeUnreachable = c.IncludeUnreachable, AutoInventory = c.AutoInv, GroupByBlock = c.Group,
+        CollectorOverrides = c.Collectors,
+    };
+
+    /// <summary>Seed <see cref="_noClientConfig"/> from settings.json (the "(No client)" profile).</summary>
+    private void SeedNoClientConfig(AppSettings s) => _noClientConfig = new ScanConfig(
+        s.TargetsText, Math.Clamp(s.Concurrency, 1, ConcurrencyLimits.Max), s.IcmpEnabled, s.TcpFallback,
+        s.Classification, s.ResolveNames, s.ResolveMac, s.IncludeUnreachable, s.AutoInventory, s.GroupByBlock,
+        s.CollectorOverrides);
+
+    /// <summary>Save the current live scan config to whichever profile is active. Best-effort; called from the
+    /// switch handler and SaveSettings.</summary>
+    private void PersistScanConfigToActiveProfile()
+    {
+        var cfg = CaptureScanConfig();
+        if (_activeProfileId is null) { _noClientConfig = cfg; return; }
+        try
+        {
+            var existing = ClientStore.Load().FirstOrDefault(c => string.Equals(c.Id, _activeProfileId, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null) ClientStore.Upsert(WithScanConfig(existing, cfg));
+        }
+        catch (Exception ex) { _runLog.Note($"Client scan-config save failed: {ex.Message}"); }
+    }
+
+    /// <summary>(Re)build the dropdown and reselect, without applying config or firing the switch behaviour.</summary>
     private void LoadClients(string? activeClientId)
     {
         _restoringClient = true;
@@ -42,10 +117,17 @@ public partial class MainViewModel
             foreach (var profile in ClientStore.Load())
                 ClientChoices.Add(new ClientChoice(profile));
             SelectedClientChoice = ClientChoices.FirstOrDefault(c =>
-                string.Equals(c.Profile?.Id, activeClientId, StringComparison.OrdinalIgnoreCase))
-                ?? ClientChoices[0];
+                string.Equals(c.Profile?.Id, activeClientId, StringComparison.OrdinalIgnoreCase)) ?? ClientChoices[0];
+            _activeProfileId = SelectedClientChoice?.Profile?.Id;
         }
         finally { _restoringClient = false; }
+    }
+
+    /// <summary>At startup, after LoadClients, apply the restored active client's scan config (a real client
+    /// overrides the "(No client)" values ApplySettings seeded).</summary>
+    private void ApplyActiveClientConfigAtStartup()
+    {
+        if (ActiveClient is { } client) ApplyScanConfig(FromClient(client));
     }
 
     partial void OnSelectedClientChoiceChanged(ClientChoice? value)
@@ -53,36 +135,76 @@ public partial class MainViewModel
         _baselineStore = null; // baseline is per-client (baseline-{id}.json)
         if (_restoringClient || value is null) return;
 
-        if (value.Profile is { } profile && !string.IsNullOrWhiteSpace(profile.TargetsText)
-            && !string.Equals(profile.TargetsText.Trim(), TargetsText.Trim(), StringComparison.Ordinal))
+        if (IsRunning)
         {
-            bool overwrite = string.IsNullOrWhiteSpace(TargetsText)
-                || MessageBox.Show($"Replace the current targets with {profile.Name}'s saved targets?",
-                       "Switch client", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
-            if (overwrite) TargetsText = profile.TargetsText;
+            // Can't switch mid-scan (it clears the grid); revert the selection.
+            StatusLine = "Finish or stop the scan before switching clients.";
+            _restoringClient = true;
+            SelectedClientChoice = ClientChoices.FirstOrDefault(c =>
+                string.Equals(c.Profile?.Id, _activeProfileId, StringComparison.OrdinalIgnoreCase)) ?? ClientChoices[0];
+            _restoringClient = false;
+            return;
         }
-        StatusLine = value.Profile is { } p ? $"Client: {p.Name}." : "No client selected.";
+
+        // 1. Persist the OLD profile's live scan config before we replace it.
+        PersistScanConfigToActiveProfile();
+
+        // 2. Clear the grid — a client switch is a fresh context.
+        ClearGridForClientSwitch();
+
+        // 3. Load and apply the NEW profile's scan config.
+        ApplyScanConfig(value.Profile is { } client ? FromClient(client) : _noClientConfig);
+
+        // 4. Commit the switch and refresh the per-client views.
+        _activeProfileId = value.Profile?.Id;
+        StatusLine = value.Profile is { } p ? $"Switched to client '{p.Name}'." : "Switched to (No client).";
         SaveSettings();
-        EvaluateBaseline(); // repaint against this client's baseline
+        _ = RefreshHistoryAsync();
+        EvaluateBaseline();
     }
 
-    /// <summary>The current targets box becomes this client's saved targets.</summary>
+    /// <summary>Clear the results (grid, selection, counts, per-run overlays) on a client switch — but not the
+    /// client selection or the just-applied targets.</summary>
+    private void ClearGridForClientSwitch()
+    {
+        CloseDetailWindows();
+        Machines.Clear();
+        SelectedMachine = null;
+        _currentRunId = null;
+        HasDoctorFindings = false;
+        FleetComplianceText = null;
+        UnknownDevicesText = null;
+        AliveCount = UnreachableCount = TotalCount = 0;
+        ProgressFraction = 0;
+        InventoryAliveCommand.NotifyCanExecuteChanged();
+        CompareCommand.NotifyCanExecuteChanged();
+        GenerateReportCommand.NotifyCanExecuteChanged();
+        WakeMissingCommand.NotifyCanExecuteChanged();
+        RefreshWakeMissing();
+    }
+
+    /// <summary>Commit the current scan settings (targets, discovery options, concurrency, collectors) to the
+    /// active client without switching away.</summary>
     [RelayCommand]
     private void SaveTargetsToClient()
     {
-        if (ActiveClient is not { } profile) { StatusLine = "Select a client first."; return; }
-        var updated = profile with { TargetsText = TargetsText };
-        ClientStore.Upsert(updated);
-        LoadClients(updated.Id);
-        StatusLine = $"Saved targets to {updated.Name}.";
+        if (ActiveClient is not { } profile) { StatusLine = "Select a client first (the 'No client' settings save automatically)."; return; }
+        SaveSettings();          // persists the active client's scan config + settings.json
+        LoadClients(profile.Id); // refresh the dropdown from disk
+        StatusLine = $"Saved scan settings to {profile.Name}.";
     }
 
     [RelayCommand]
     private void OpenClientManager()
     {
+        SaveSettings(); // flush the live config to the active profile so the manager sees current targets/settings
         var window = new ClientManagerWindow(ClientStore, _paths) { Owner = Application.Current.MainWindow };
         window.ShowDialog();
-        if (window.Changed)
-            LoadClients(ActiveClient?.Id);
+        if (!window.Changed) return;
+
+        var keep = ActiveClient?.Id;
+        LoadClients(keep);
+        // Pick up target/branding edits the manager made to the still-active client.
+        if (ActiveClient is { } c) ApplyScanConfig(FromClient(c));
     }
 }

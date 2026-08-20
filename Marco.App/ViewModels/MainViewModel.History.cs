@@ -93,8 +93,10 @@ public partial class MainViewModel
         IReadOnlyList<ScanHistoryEntry> entries;
         try { entries = await Task.Run(() => store.List()); }
         catch { return; } // List() is already tolerant; belt and braces around the Task itself
+        // Show only this client's runs (the "(No client)" profile sees runs with no client tag).
+        var activeName = ActiveClient?.Name;
         History.Clear();
-        foreach (var entry in entries)
+        foreach (var entry in entries.Where(e => string.Equals(e.Client ?? "", activeName ?? "", StringComparison.OrdinalIgnoreCase)))
             History.Add(new HistoryEntryDisplay(entry));
         OnPropertyChanged(nameof(HistorySummary));
         CompareCommand.NotifyCanExecuteChanged();

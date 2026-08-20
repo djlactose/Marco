@@ -15,7 +15,19 @@ public sealed record ClientProfile(
     string? AccentColor = null,
     string? PreparedBy = null,
     string? Notes = null,
-    DateTime CreatedUtc = default)
+    DateTime CreatedUtc = default,
+    // Per-client scan configuration. Defaults match the app's global defaults, so a client created before these
+    // existed (or a shared file that omits them) loads with sensible values. Never any secrets — see the class doc.
+    int Concurrency = 32,
+    bool IcmpEnabled = true,
+    bool TcpFallback = true,
+    bool Classification = true,
+    bool ResolveNames = true,
+    bool ResolveMac = true,
+    bool IncludeUnreachable = false,
+    bool AutoInventory = false,
+    bool GroupByBlock = true,
+    Dictionary<string, bool>? CollectorOverrides = null)
 {
     public static ClientProfile New(string name, string targetsText = "")
         => new(Guid.NewGuid().ToString("n"), name, targetsText, CreatedUtc: DateTime.UtcNow);

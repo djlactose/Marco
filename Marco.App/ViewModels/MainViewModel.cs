@@ -182,7 +182,8 @@ public partial class MainViewModel : ObservableObject
         _inventoryStatusTimer.Tick += (_, _) => RefreshScanStatus();
 
         LoadClients(_pendingActiveClientId);
-        _ = RefreshHistoryAsync(); // populate the scan-history expander in the background
+        ApplyActiveClientConfigAtStartup(); // a restored real client overrides the "(No client)" seed
+        _ = RefreshHistoryAsync(); // populate the scan-history expander (filtered to the active client)
     }
 
     /// <summary>Client id from settings, applied once the choices list exists (ctor order).</summary>
@@ -212,31 +213,40 @@ public partial class MainViewModel : ObservableObject
         _complianceOverrides = s.ComplianceRuleOverrides;
         _rules = null;
         _pendingActiveClientId = s.ActiveClientId;
+        SeedNoClientConfig(s); // settings.json holds the "(No client)" profile's scan config
         BuildCollectorOptions(s.CollectorOverrides);
     }
 #pragma warning restore MVVMTK0034
 
-    /// <summary>Persist current options; called on exit and immediately when the beta toggle changes.</summary>
-    public void SaveSettings() => SettingsStore.Save(_paths.SettingsFile, new AppSettings
+    /// <summary>Persist current options; called on exit, on the beta toggle, and on a client switch. The live scan
+    /// config (targets, discovery, concurrency, collectors) is committed to the ACTIVE profile — a real client, or
+    /// the "(No client)" config that settings.json's scan fields represent — so switching clients never leaks one
+    /// client's targets into another's, or into the no-client defaults.</summary>
+    public void SaveSettings()
     {
-        IncludeBetaUpdates = _includeBetaSetting,
-        TargetsText = TargetsText,
-        Concurrency = Concurrency,
-        IcmpEnabled = IcmpEnabled,
-        TcpFallback = TcpFallback,
-        Classification = Classification,
-        ResolveNames = ResolveNames,
-        ResolveMac = ResolveMac,
-        IncludeUnreachable = IncludeUnreachable,
-        AutoInventory = AutoInventory,
-        GroupByBlock = GroupByBlock,
-        CollectorOverrides = CollectorCatalog.OverridesFor(EnabledCollectorNames()),
-        AutoSaveScans = _autoSaveScans,
-        ScanHistoryLimit = _scanHistoryLimit,
-        AutoSaveDiscoveryOnly = _autoSaveDiscoveryOnly,
-        ComplianceRuleOverrides = _complianceOverrides,
-        ActiveClientId = ActiveClient?.Id,
-    });
+        PersistScanConfigToActiveProfile(); // updates _noClientConfig, or upserts the active client
+        SettingsStore.Save(_paths.SettingsFile, new AppSettings
+        {
+            IncludeBetaUpdates = _includeBetaSetting,
+            // Scan fields come from the "(No client)" profile, never the currently-displayed client.
+            TargetsText = _noClientConfig.TargetsText,
+            Concurrency = _noClientConfig.Concurrency,
+            IcmpEnabled = _noClientConfig.Icmp,
+            TcpFallback = _noClientConfig.Tcp,
+            Classification = _noClientConfig.Classify,
+            ResolveNames = _noClientConfig.Names,
+            ResolveMac = _noClientConfig.Mac,
+            IncludeUnreachable = _noClientConfig.IncludeUnreachable,
+            AutoInventory = _noClientConfig.AutoInv,
+            GroupByBlock = _noClientConfig.Group,
+            CollectorOverrides = _noClientConfig.Collectors,
+            AutoSaveScans = _autoSaveScans,
+            ScanHistoryLimit = _scanHistoryLimit,
+            AutoSaveDiscoveryOnly = _autoSaveDiscoveryOnly,
+            ComplianceRuleOverrides = _complianceOverrides,
+            ActiveClientId = ActiveClient?.Id,
+        });
+    }
 
     partial void OnFilterTextChanged(string value) => MachinesView.Refresh();
 
@@ -440,7 +450,11 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnIsCancellingChanged(bool value) => RefreshScanCommands();
 
-    partial void OnIsRunningChanged(bool value) => RefreshScanCommands();
+    partial void OnIsRunningChanged(bool value)
+    {
+        RefreshScanCommands();
+        OnPropertyChanged(nameof(ClientSwitchEnabled)); // the client combo is disabled during a run
+    }
 
     /// <summary>Every command whose CanExecute reads run state. Called from the IsScanning / IsCancelling change
     /// hooks so a state flip can never leave a button stale.</summary>
