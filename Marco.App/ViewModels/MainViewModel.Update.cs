@@ -26,6 +26,10 @@ public partial class MainViewModel
     [ObservableProperty] private string _updateCheckStatus = "";
     [ObservableProperty] private bool _whatsNewVisible;
     [ObservableProperty] private string _whatsNewText = "";
+    /// <summary>The release notes shown inline when the banner is expanded ("" = none shipped with the
+    /// release, so the What's-new link falls back to opening the release page).</summary>
+    [ObservableProperty] private string _whatsNewNotes = "";
+    [ObservableProperty] private bool _whatsNewExpanded;
 
     public string VersionDisplay => $"Marco v{AppVersion.Display}" + (AppVersion.IsBeta ? " (beta)" : "");
 
@@ -36,7 +40,8 @@ public partial class MainViewModel
         if (_updater?.ReadWhatsNew() is { } whatsNew)
         {
             _whatsNewUrl = whatsNew.HtmlUrl;
-            WhatsNewText = $"Updated to v{whatsNew.Version}.";
+            WhatsNewText = $"Marco updated to v{whatsNew.Version}";
+            WhatsNewNotes = ReleaseNotesText.Clean(whatsNew.Notes);
             WhatsNewVisible = true;
         }
 
@@ -303,14 +308,24 @@ public partial class MainViewModel
         _ = RunUpdateCheckAsync(null, manual: true);
     }
 
+    /// <summary>The banner's What's-new link: show the shipped release notes right here; only fall back to
+    /// the browser when the release carried none.</summary>
     [RelayCommand]
-    private void OpenWhatsNew() => OpenUrl(_whatsNewUrl ?? "https://github.com/djlactose/Marco/releases");
+    private void OpenWhatsNew()
+    {
+        if (WhatsNewNotes.Length > 0) WhatsNewExpanded = !WhatsNewExpanded;
+        else OpenUrl(_whatsNewUrl ?? "https://github.com/djlactose/Marco/releases");
+    }
+
+    [RelayCommand]
+    private void OpenWhatsNewRelease() => OpenUrl(_whatsNewUrl ?? "https://github.com/djlactose/Marco/releases");
 
     [RelayCommand]
     private void DismissWhatsNew()
     {
         _updater?.DismissWhatsNew();
         WhatsNewVisible = false;
+        WhatsNewExpanded = false;
     }
 
     [RelayCommand]

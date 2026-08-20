@@ -35,16 +35,44 @@
       </Grid>
     </Border>
 
-    <!-- Post-update "What's new" banner (shown once after an update applies) -->
-    <Border DockPanel.Dock="Top" Background="#FFF8E1" BorderBrush="#E6D28C" BorderThickness="0,0,0,1" Padding="12,4"
+    <!-- Post-update "What's new" banner (shown once after an update applies). The link expands the release
+         notes inline — the browser is only needed for the full release page. -->
+    <Border DockPanel.Dock="Top" Background="#FFF8E1" BorderBrush="#E6D28C" BorderThickness="0,0,0,1" Padding="12,6"
             Visibility="{Binding WhatsNewVisible, Converter={StaticResource BoolToVis}}">
       <DockPanel>
         <Button DockPanel.Dock="Right" Content="✕" Padding="6,0" MinWidth="0" Margin="8,0,0,0"
-                ToolTip="Dismiss" Command="{Binding DismissWhatsNewCommand}" />
-        <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
-          <Run Text="{Binding WhatsNewText, Mode=OneWay}" />
-          <Hyperlink Command="{Binding OpenWhatsNewCommand}">What's new</Hyperlink>
-        </TextBlock>
+                VerticalAlignment="Top" ToolTip="Dismiss" Command="{Binding DismissWhatsNewCommand}" />
+        <StackPanel>
+          <TextBlock TextTrimming="CharacterEllipsis">
+            <Run Text="🎉" /><Run Text=" " /><Run Text="{Binding WhatsNewText, Mode=OneWay}" FontWeight="SemiBold" /><Run Text="  " />
+            <Hyperlink Command="{Binding OpenWhatsNewCommand}">
+              <TextBlock>
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock">
+                    <Setter Property="Text" Value="See what's new" />
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding WhatsNewExpanded}" Value="True">
+                        <Setter Property="Text" Value="Hide" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
+            </Hyperlink>
+          </TextBlock>
+          <Border Margin="0,6,0,2" Background="White" BorderBrush="#E6D28C" BorderThickness="1"
+                  CornerRadius="3" Padding="12,8"
+                  Visibility="{Binding WhatsNewExpanded, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
+              <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto">
+                <TextBlock Text="{Binding WhatsNewNotes}" TextWrapping="Wrap" />
+              </ScrollViewer>
+              <TextBlock Margin="0,8,0,0" FontSize="11">
+                <Hyperlink Command="{Binding OpenWhatsNewReleaseCommand}">View the release on GitHub</Hyperlink>
+              </TextBlock>
+            </StackPanel>
+          </Border>
+        </StackPanel>
       </DockPanel>
     </Border>
 
