@@ -441,6 +441,8 @@
                       ToolTip="Load a previously exported JSON scan back into the grid" />
               <Button Content="Compare…" Command="{Binding CompareCommand}"
                       ToolTip="Diff the current grid against the most recent saved scan of these ranges" />
+              <Button Content="Report…" Command="{Binding GenerateReportCommand}"
+                      ToolTip="Generate a branded HTML assessment report (executive summary, findings, asset appendix)" />
               <Button Content="Export CSV" Command="{Binding ExportCsvCommand}" />
               <Button Content="Export JSON" Command="{Binding ExportJsonCommand}" />
             </StackPanel>

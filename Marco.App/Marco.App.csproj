@@ -31,6 +31,7 @@
     <ProjectReference Include="..\Marco.Inventory\Marco.Inventory.csproj" />
     <ProjectReference Include="..\Marco.Credentials\Marco.Credentials.csproj" />
     <ProjectReference Include="..\Marco.Export\Marco.Export.csproj" />
+    <ProjectReference Include="..\Marco.Report\Marco.Report.csproj" />
   </ItemGroup>
 
 </Project>

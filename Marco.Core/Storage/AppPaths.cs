@@ -54,6 +54,7 @@ public sealed class AppPaths
     public string ScansDirectory => Sub("scans");
     public string ExportsDirectory => Sub("exports");
     public string UpdatesDirectory => Sub("updates");
+    public string ReportsDirectory => Sub("reports");
     /// <summary>User compliance rule packs (*.json), loaded on top of the embedded defaults.</summary>
     public string ComplianceDirectory => Sub("compliance");
 

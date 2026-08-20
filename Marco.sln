@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Marco.Credentials", "Marco.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Marco.Export", "Marco.Export\Marco.Export.csproj", "{87752DBC-9CFE-45C4-8AC1-D99236CFD212}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Marco.Report", "Marco.Report\Marco.Report.csproj", "{B03F8367-71FB-46EE-B601-877060D9F91E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -54,5 +56,9 @@ Global
 		{87752DBC-9CFE-45C4-8AC1-D99236CFD212}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{87752DBC-9CFE-45C4-8AC1-D99236CFD212}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{87752DBC-9CFE-45C4-8AC1-D99236CFD212}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B03F8367-71FB-46EE-B601-877060D9F91E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B03F8367-71FB-46EE-B601-877060D9F91E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B03F8367-71FB-46EE-B601-877060D9F91E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B03F8367-71FB-46EE-B601-877060D9F91E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

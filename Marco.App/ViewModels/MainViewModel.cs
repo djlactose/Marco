@@ -301,6 +301,7 @@ public partial class MainViewModel : ObservableObject
         {
             InventoryAliveCommand.NotifyCanExecuteChanged(); // CanInventory depends on Machines.Count
             CompareCommand.NotifyCanExecuteChanged();
+            GenerateReportCommand.NotifyCanExecuteChanged();
             RefreshWakeMissing();
             WakeMissingCommand.NotifyCanExecuteChanged();
         }
@@ -455,6 +456,7 @@ public partial class MainViewModel : ObservableObject
         OpenHistoryEntryCommand.NotifyCanExecuteChanged();
         CompareCommand.NotifyCanExecuteChanged();
         CompareWithCurrentCommand.NotifyCanExecuteChanged();
+        GenerateReportCommand.NotifyCanExecuteChanged();
         BlessCurrentAsBaselineCommand.NotifyCanExecuteChanged();
         AddCredentialCommand.NotifyCanExecuteChanged();
         RemoveCredentialCommand.NotifyCanExecuteChanged();
