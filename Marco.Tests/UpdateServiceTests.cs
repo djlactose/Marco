@@ -35,6 +35,7 @@ public class UpdateServiceTests
         }
 
         public string StagedPath => Path.Combine(Paths.UpdatesDirectory, "Marco-9.9.9.exe");
+        public string PartialPath => $"{StagedPath}.{Environment.ProcessId}.partial";
         public string ManifestPath => Path.Combine(Paths.UpdatesDirectory, "staged.json");
         public string StageLockPath => Path.Combine(Paths.UpdatesDirectory, "stage.lock");
         public bool Logged(string stage) { lock (Log) return Log.Any(e => e.stage == stage); }
@@ -147,5 +148,90 @@ public class UpdateServiceTests
         Assert.Equal(UpdateState.UpToDate, result.State);
         Assert.Equal(0, h.Source.Downloads);
         Assert.False(File.Exists(h.StageLockPath));
+    }
+
+    /// <summary>A handle like a sync client's or AV scanner's: others may read and write, but not rename/delete
+    /// (no FileShare.Delete) — so SHA verification succeeds while File.Move throws a sharing-violation IOException,
+    /// exactly the diagnosed real-world failure.</summary>
+    private static FileStream ScannerHold(string path)
+        => new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+
+    [Fact]
+    public async Task Stage_PartialLockedBriefly_RetriesMoveAndStages()
+    {
+        using var h = new Harness();
+        Directory.CreateDirectory(h.Paths.UpdatesDirectory);
+        File.WriteAllBytes(h.PartialPath, h.Source.Payload);
+        var gate = ScannerHold(h.PartialPath);
+        var releaser = Task.Run(async () => { await Task.Delay(250); gate.Dispose(); });
+
+        var result = await h.Service.CheckAndStageAsync();
+        await releaser;
+
+        Assert.Equal(UpdateState.Staged, result.State);
+        Assert.Equal(h.Source.Payload, File.ReadAllBytes(h.StagedPath));
+        Assert.False(h.Logged("stage_failed"));
+    }
+
+    [Fact]
+    public async Task Stage_PartialLockedThroughout_LogsStageFailed_AndKeepsVerifiedPartial()
+    {
+        using var h = new Harness();
+        Directory.CreateDirectory(h.Paths.UpdatesDirectory);
+        File.WriteAllBytes(h.PartialPath, h.Source.Payload);
+
+        UpdateCheckResult result;
+        using (ScannerHold(h.PartialPath))
+        {
+            result = await h.Service.CheckAndStageAsync();
+        }
+
+        Assert.Equal(UpdateState.Failed, result.State);
+        Assert.Contains(h.Log, e => e.stage == "stage_failed" && e.detail.Contains("IOException"));
+        Assert.False(h.Logged("check_failed")); // the check succeeded; only the staging move failed
+        Assert.Equal(h.Source.Payload, File.ReadAllBytes(h.PartialPath)); // kept for reuse on retry
+    }
+
+    [Fact]
+    public async Task Stage_ReusesVerifiedPartial_WithoutRedownloading()
+    {
+        using var h = new Harness();
+        Directory.CreateDirectory(h.Paths.UpdatesDirectory);
+        File.WriteAllBytes(h.PartialPath, h.Source.Payload);
+
+        var result = await h.Service.CheckAndStageAsync();
+
+        Assert.Equal(UpdateState.Staged, result.State);
+        Assert.Equal(0, h.Source.Downloads);
+        Assert.True(h.Logged("partial_reused"));
+        Assert.Equal(h.Source.Payload, File.ReadAllBytes(h.StagedPath));
+    }
+
+    [Fact]
+    public async Task Stage_CorruptPartial_IsDiscardedAndRedownloaded()
+    {
+        using var h = new Harness();
+        Directory.CreateDirectory(h.Paths.UpdatesDirectory);
+        File.WriteAllBytes(h.PartialPath, System.Text.Encoding.ASCII.GetBytes("garbage"));
+
+        var result = await h.Service.CheckAndStageAsync();
+
+        Assert.Equal(UpdateState.Staged, result.State);
+        Assert.Equal(1, h.Source.Downloads);
+        Assert.False(h.Logged("partial_reused"));
+        Assert.Equal(h.Source.Payload, File.ReadAllBytes(h.StagedPath));
+    }
+
+    [Fact]
+    public async Task Stage_ChecksumUnavailable_LogsStageFailed()
+    {
+        using var h = new Harness();
+        h.Source.ChecksumUnavailable = true;
+
+        var result = await h.Service.CheckAndStageAsync();
+
+        Assert.Equal(UpdateState.Failed, result.State);
+        Assert.Equal(0, h.Source.Downloads);
+        Assert.True(h.Logged("stage_failed"));
     }
 }

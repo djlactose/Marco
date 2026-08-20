@@ -203,6 +203,14 @@ public partial class MainViewModel
             UpdateText = $"Downloading update {release.TagName}… 0%";
             var progress = new Progress<double>(f => UpdateText = $"Downloading update {release.TagName}… {f * 100:0}%");
             staged = await Task.Run(() => _updater.StageAsync(release, progress));
+            if (staged.State == UpdateState.Failed)
+            {
+                // A sync-client/AV lock can outlast the staging retries; one quiet retry after a pause almost
+                // always succeeds, and it reuses the already-verified partial so it costs no bandwidth.
+                UpdateText = $"Update {release.TagName} — retrying…";
+                await Task.Delay(TimeSpan.FromSeconds(3));
+                staged = await Task.Run(() => _updater.StageAsync(release, progress));
+            }
             _lastUpdateResult = staged;
         }
         finally
@@ -221,11 +229,12 @@ public partial class MainViewModel
                 ScheduleDeferredRecheck();
                 break;
             default:
-                // Download or verification failed (details in the run log) — degrade to the release page.
-                UpdateText = $"Update {release.TagName} download failed — view release";
-                _lastUpdateResult = new UpdateCheckResult(UpdateState.NotifyOnly, release, null);
+                // Download/verify/stage failed twice (details in the run log). Keep the header link as a one-click
+                // retry rather than downgrading to NotifyOnly, which would strand the operator on the release page.
+                UpdateText = $"Update {release.TagName} download failed — click to retry";
+                _lastUpdateResult = new UpdateCheckResult(UpdateState.Available, release, null);
                 MessageBox.Show(
-                    $"The update could not be downloaded or verified. See the run log for details.\n\nYou can download {release.TagName} manually from the release page.",
+                    $"The update could not be downloaded or installed. See the run log for details.\n\nYou can retry from the update link in the header, or download {release.TagName} manually from the release page.",
                     "Update failed", MessageBoxButton.OK, MessageBoxImage.Warning);
                 break;
         }

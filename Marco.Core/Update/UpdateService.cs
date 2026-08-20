@@ -100,8 +100,8 @@ public sealed class UpdateService
             // The updated exe (the one running right now) never started successfully. Put the previous one back.
             var bad = exe + ".bad";
             TryDelete(bad);
-            File.Move(exe, bad);
-            File.Move(old, exe);
+            FileRetry.Run(() => File.Move(exe, bad));
+            FileRetry.Run(() => File.Move(old, exe));
             WriteJson(RollbackPath, new RollbackInfo(sentinel.Version)); // never re-stage this exact version
             TryDelete(SentinelPath);
             TryDelete(WhatsNewPath);
@@ -301,29 +301,38 @@ public sealed class UpdateService
             }
             if (expected is null)
             {
-                _log("check_failed", $"{release.TagName}: checksum asset unreadable");
+                _log("stage_failed", $"{release.TagName}: checksum asset unreadable");
                 return new UpdateCheckResult(UpdateState.Failed, release, null);
             }
 
-            _log("download_started", release.TagName);
             var partial = $"{stagedPath}.{Environment.ProcessId}.partial";
-            TryDelete(partial);
-            using (var dlCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+            if (File.Exists(partial) && Sha256File.Verify(partial, expected))
             {
-                dlCts.CancelAfter(TimeSpan.FromMinutes(15));
-                IProgress<long>? bytes = progress is null ? null : new Progress<long>(received =>
-                    progress.Report(release.ExeSizeBytes > 0 ? Math.Clamp((double)received / release.ExeSizeBytes, 0, 1) : 0));
-                await _source.DownloadExeAsync(release, partial, bytes, dlCts.Token).ConfigureAwait(false);
+                // An earlier attempt in this session downloaded and verified this exact payload but the final move
+                // failed (sync client / AV briefly locking the file) — don't download the ~70 MB again.
+                _log("partial_reused", release.TagName);
             }
-
-            if (!Sha256File.Verify(partial, expected))
+            else
             {
                 TryDelete(partial);
-                _log("sha_mismatch", release.TagName);
-                return new UpdateCheckResult(UpdateState.Failed, release, null);
+                _log("download_started", release.TagName);
+                using (var dlCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+                {
+                    dlCts.CancelAfter(TimeSpan.FromMinutes(15));
+                    IProgress<long>? bytes = progress is null ? null : new Progress<long>(received =>
+                        progress.Report(release.ExeSizeBytes > 0 ? Math.Clamp((double)received / release.ExeSizeBytes, 0, 1) : 0));
+                    await _source.DownloadExeAsync(release, partial, bytes, dlCts.Token).ConfigureAwait(false);
+                }
+
+                if (!Sha256File.Verify(partial, expected))
+                {
+                    TryDelete(partial);
+                    _log("sha_mismatch", release.TagName);
+                    return new UpdateCheckResult(UpdateState.Failed, release, null);
+                }
             }
 
-            File.Move(partial, stagedPath, overwrite: true);
+            FileRetry.Run(() => File.Move(partial, stagedPath, overwrite: true));
             WriteStagedManifest(new StagedManifest(
                 release.Version.ToString(), fileName, expected, DateTime.UtcNow, release.Body, release.HtmlUrl));
             _log("staged", release.TagName);
@@ -332,7 +341,9 @@ public sealed class UpdateService
         }
         catch (Exception ex)
         {
-            _log("check_failed", $"{ex.GetType().Name}: {ex.Message}");
+            // Deliberately keeps the .partial: if it downloaded and verified, the next attempt reuses it instead of
+            // re-downloading; CleanupArtifacts reclaims strays at the next launch.
+            _log("stage_failed", $"{release.TagName}: {ex.GetType().Name}: {ex.Message}");
             return new UpdateCheckResult(UpdateState.Failed, release, null);
         }
     }
@@ -420,21 +431,21 @@ public sealed class UpdateService
         var staged = Path.Combine(UpdatesDirectory, manifest.FileName);
         var old = exe + ".old";
 
-        try { if (File.Exists(old)) File.Delete(old); }
+        try { FileRetry.Run(() => { if (File.Exists(old)) File.Delete(old); }); }
         catch (Exception ex)
         {
             _log("apply_failed", $"previous .old is locked: {ex.Message}");
             return false;
         }
 
-        try { File.Move(exe, old); }
+        try { FileRetry.Run(() => File.Move(exe, old)); }
         catch (Exception ex)
         {
             _log("apply_failed", $"could not rename running exe: {ex.Message}");
             return false;
         }
 
-        try { File.Move(staged, exe); } // cross-volume safe (copy+delete fallback)
+        try { FileRetry.Run(() => File.Move(staged, exe)); } // cross-volume safe (copy+delete fallback)
         catch (Exception ex)
         {
             try { File.Move(old, exe); } catch { /* keep whatever state we can */ }

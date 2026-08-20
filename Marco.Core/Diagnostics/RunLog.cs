@@ -43,8 +43,8 @@ public sealed class RunLog
 
     public void Note(string message) => Write("note", new { message });
 
-    /// <summary>Auto-update lifecycle: check_started, up_to_date, available, staged, stage_deferred, sha_mismatch,
-    /// check_failed, applied, apply_failed, gate_busy, rollback, notify_only, cleanup.</summary>
+    /// <summary>Auto-update lifecycle: check_started, up_to_date, available, staged, stage_deferred, partial_reused,
+    /// sha_mismatch, stage_failed, check_failed, applied, apply_failed, gate_busy, rollback, notify_only, cleanup.</summary>
     public void UpdateEvent(string stage, string detail) => Write("update", new { stage, detail });
 
     /// <summary>Unhandled exception, from the dispatcher, appdomain, or task scheduler.</summary>

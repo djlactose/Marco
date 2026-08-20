@@ -93,6 +93,7 @@ internal sealed class FakeUpdateSource : IUpdateSource
 {
     public ReleaseInfo? Release { get; set; }
     public byte[] Payload { get; set; } = System.Text.Encoding.ASCII.GetBytes("marco-fake-exe-payload");
+    public bool ChecksumUnavailable { get; set; }
     public int Downloads;
 
     public string PayloadSha256 => Convert.ToHexString(SHA256.HashData(Payload)).ToLowerInvariant();
@@ -101,7 +102,7 @@ internal sealed class FakeUpdateSource : IUpdateSource
         => Task.FromResult(Release);
 
     public Task<string?> GetChecksumAsync(ReleaseInfo release, CancellationToken ct)
-        => Task.FromResult<string?>(PayloadSha256);
+        => Task.FromResult(ChecksumUnavailable ? null : PayloadSha256);
 
     public Task DownloadExeAsync(ReleaseInfo release, string destinationPath, IProgress<long>? bytesReceived, CancellationToken ct)
     {
