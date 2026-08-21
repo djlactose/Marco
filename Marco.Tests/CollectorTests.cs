@@ -118,6 +118,158 @@ public class CollectorTests
         Assert.Equal(17_179_869_184, m.TotalMemoryBytes);
         Assert.Equal(2, m.MemorySlotsUsed);
         Assert.Equal(4, m.MemorySlotsTotal);
+        Assert.Null(m.MaxMemoryBytes); // no MaxCapacity reported → unknown, not 0
+        Assert.Null(m.MemoryModules[0].MemoryTypeName);
+    }
+
+    [Fact]
+    public async Task MemoryCollector_DecodesTypeFormFactorConfiguredSpeed_AndPlatformMax()
+    {
+        var wmi = new FakeWmiSession()
+            .With("Win32_PhysicalMemory",
+                Obj(("Capacity", (ulong)8_589_934_592), ("Speed", 3200), ("ConfiguredClockSpeed", 2933),
+                    ("SMBIOSMemoryType", 26), ("MemoryType", 0), ("FormFactor", 12), ("DeviceLocator", "DIMM A")))
+            .With("Win32_PhysicalMemoryArray", Obj(("MemoryDevices", 2), ("MaxCapacity", (uint)0x80000000), ("MaxCapacityEx", (ulong)67_108_864)));
+
+        var m = new Machine("10.0.0.4");
+        await new MemoryCollector().CollectAsync(Ctx(wmi), m, default);
+
+        var mod = Assert.Single(m.MemoryModules);
+        Assert.Equal("DDR4", mod.MemoryTypeName);
+        Assert.Equal("SODIMM", mod.FormFactor);
+        Assert.Equal(2933, mod.ConfiguredSpeedMhz);
+        Assert.Equal("DDR4 · 3200 MHz (running 2933) · SODIMM", mod.TypeDisplay);
+        Assert.Equal(64L * 1024 * 1024 * 1024, m.MaxMemoryBytes); // 67108864 KB
+        Assert.Equal("8 GB, 1 of 2 slots used, max 64 GB", m.MemorySummary);
+    }
+
+    [Fact]
+    public async Task MemoryCollector_FallsBackToMemoryType_WhenSmbiosTypeUnknown()
+    {
+        var wmi = new FakeWmiSession()
+            .With("Win32_PhysicalMemory", Obj(("Capacity", (ulong)4_294_967_296), ("SMBIOSMemoryType", 0), ("MemoryType", 24)))
+            .With("Win32_PhysicalMemoryArray", Obj(("MemoryDevices", 2), ("MaxCapacity", (uint)16_777_216)));
+
+        var m = new Machine("10.0.0.4");
+        await new MemoryCollector().CollectAsync(Ctx(wmi), m, default);
+
+        Assert.Equal("DDR3", m.MemoryModules[0].MemoryTypeName);
+        Assert.Null(m.MemoryModules[0].FormFactor);
+        Assert.Equal(16L * 1024 * 1024 * 1024, m.MaxMemoryBytes); // MaxCapacity (KB) used when Ex is absent
+    }
+
+    [Fact]
+    public async Task MemoryCollector_ReportsMaxAsUnknown_WhenPlaceholderOrBelowInstalled()
+    {
+        // Only the 0x80000000 "see extended" sentinel, and no MaxCapacityEx.
+        var placeholder = new FakeWmiSession()
+            .With("Win32_PhysicalMemory", Obj(("Capacity", (ulong)8_589_934_592)))
+            .With("Win32_PhysicalMemoryArray", Obj(("MemoryDevices", 2), ("MaxCapacity", (uint)0x80000000)));
+        var m1 = new Machine("10.0.0.4");
+        await new MemoryCollector().CollectAsync(Ctx(placeholder), m1, default);
+        Assert.Null(m1.MaxMemoryBytes);
+
+        // A stale SMBIOS table claiming less than what is installed.
+        var stale = new FakeWmiSession()
+            .With("Win32_PhysicalMemory", Obj(("Capacity", (ulong)34_359_738_368)))
+            .With("Win32_PhysicalMemoryArray", Obj(("MemoryDevices", 2), ("MaxCapacity", (uint)16_777_216)));
+        var m2 = new Machine("10.0.0.4");
+        await new MemoryCollector().CollectAsync(Ctx(stale), m2, default);
+        Assert.Null(m2.MaxMemoryBytes);
+        Assert.Equal("32 GB, 1 of 2 slots used", m2.MemorySummary);
+    }
+
+    [Fact]
+    public async Task MemoryCollector_RetriesWithClassicColumns_OnOlderHosts()
+    {
+        // Pre-Win10: the class has no SMBIOSMemoryType, and WMI rejects the whole SELECT.
+        var wmi = new FakeWmiSession()
+            .ThrowsWhenWqlContains("SMBIOSMemoryType")
+            .ThrowsWhenWqlContains("MaxCapacityEx")
+            .With("Win32_PhysicalMemory", Obj(("Capacity", (ulong)4_294_967_296), ("Speed", 1333), ("DeviceLocator", "DIMM0")))
+            .With("Win32_PhysicalMemoryArray", Obj(("MemoryDevices", 4), ("MaxCapacity", (uint)33_554_432)));
+
+        var m = new Machine("10.0.0.4");
+        await new MemoryCollector().CollectAsync(Ctx(wmi), m, default);
+
+        Assert.Equal(4_294_967_296, m.TotalMemoryBytes);
+        Assert.Equal(1333, m.MemoryModules[0].SpeedMhz);
+        Assert.Equal(4, m.MemorySlotsTotal);
+        Assert.Equal(32L * 1024 * 1024 * 1024, m.MaxMemoryBytes);
+        Assert.Equal(4, wmi.Queries.Count); // extended → classic, for both classes
+    }
+
+    [Fact]
+    public async Task MemoryCollector_StillFails_WhenClassicQueryFailsToo()
+    {
+        var wmi = new FakeWmiSession()
+            .Throws("Win32_PhysicalMemory", new WmiException(WmiFailureKind.AccessDenied, "denied"));
+        var ex = await Assert.ThrowsAsync<WmiException>(() => new MemoryCollector().CollectAsync(Ctx(wmi), new Machine("10.0.0.4"), default));
+        Assert.Equal(WmiFailureKind.AccessDenied, ex.Kind);
+    }
+
+    [Theory]
+    [InlineData(20, "DDR")]
+    [InlineData(24, "DDR3")]
+    [InlineData(26, "DDR4")]
+    [InlineData(34, "DDR5")]
+    [InlineData(30, "LPDDR4")]
+    [InlineData(35, "LPDDR5")]
+    [InlineData(0, null)]
+    [InlineData(2, null)]
+    [InlineData(null, null)]
+    public void MemoryCollector_DescribeMemoryType(int? code, string? expected)
+        => Assert.Equal(expected, MemoryCollector.DescribeMemoryType(code));
+
+    [Fact]
+    public void MemoryCollector_DescribeFormFactor()
+    {
+        Assert.Equal("DIMM", MemoryCollector.DescribeFormFactor(8));
+        Assert.Equal("SODIMM", MemoryCollector.DescribeFormFactor(12));
+        Assert.Null(MemoryCollector.DescribeFormFactor(0));
+        Assert.Null(MemoryCollector.DescribeFormFactor(null));
+    }
+
+    [Fact]
+    public async Task SystemCollector_CountsExpansionSlots_AndListsFreeOnes()
+    {
+        var wmi = new FakeWmiSession()
+            .With("Win32_ComputerSystem", Obj(("Name", "PC1"), ("Manufacturer", "Dell Inc."), ("Model", "OptiPlex")))
+            .With("Win32_SystemEnclosure", Obj(("ChassisTypes", new ushort[] { 6 })))
+            .With("Win32_SystemSlot",
+                Obj(("SlotDesignation", "PCIEX16_1"), ("CurrentUsage", 4)),
+                Obj(("SlotDesignation", "PCIEX1_1"), ("CurrentUsage", 3)),
+                Obj(("SlotDesignation", "M.2_2"), ("CurrentUsage", 3)),
+                Obj(("SlotDesignation", "J7"), ("CurrentUsage", 2))); // Unknown usage: counted, not free
+
+        var m = new Machine("10.0.0.1");
+        await new SystemCollector().CollectAsync(Ctx(wmi), m, default);
+
+        Assert.Equal("Mini Tower", m.System.ChassisType);
+        Assert.Equal(4, m.System.ExpansionSlotsTotal);
+        Assert.Equal(2, m.System.ExpansionSlotsFree);
+        Assert.Equal("PCIEX1_1, M.2_2", m.System.ExpansionSlotsFreeList);
+        Assert.Equal("Estimate: tower/desktop chassis, 0 internal disks, 2 of 4 expansion slots free (PCIEX1_1, M.2_2) — likely room for additional drives.", m.ExpansionOutlook);
+    }
+
+    [Fact]
+    public async Task SystemCollector_LeavesSlotsNull_WhenClassEmptyOrFails()
+    {
+        var empty = new FakeWmiSession()
+            .With("Win32_ComputerSystem", Obj(("Name", "VM1"), ("Manufacturer", "VMware, Inc.")));
+        var m1 = new Machine("10.0.0.1");
+        await new SystemCollector().CollectAsync(Ctx(empty), m1, default);
+        Assert.Null(m1.System.ExpansionSlotsTotal);
+        Assert.Null(m1.System.ExpansionSlotsFree);
+        Assert.Null(m1.ExpansionOutlook);
+
+        var denied = new FakeWmiSession()
+            .With("Win32_ComputerSystem", Obj(("Name", "PC1")))
+            .Throws("Win32_SystemSlot", new WmiException(WmiFailureKind.AccessDenied, "denied"));
+        var m2 = new Machine("10.0.0.2");
+        await new SystemCollector().CollectAsync(Ctx(denied), m2, default); // must not throw
+        Assert.Null(m2.System.ExpansionSlotsTotal);
+        Assert.Equal("PC1", m2.Name);
     }
 
     [Fact]

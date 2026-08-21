@@ -9,6 +9,9 @@ public sealed class SystemCollector : IInventoryCollector
 {
     public string Name => "System";
 
+    /// <summary>Win32_SystemSlot.CurrentUsage: 3 = Available, 4 = In Use (1/2 = Other/Unknown are not counted free).</summary>
+    private const int SlotAvailable = 3;
+
     private static readonly string[] ChassisTypeNames =
     {
         "Other", "Unknown", "Desktop", "Low Profile Desktop", "Pizza Box", "Mini Tower", "Tower", "Portable",
@@ -60,6 +63,23 @@ public sealed class SystemCollector : IInventoryCollector
         {
             machine.System.MotherboardManufacturer = board.GetString("Manufacturer");
             machine.System.MotherboardModel = board.GetString("Product");
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        // Expansion slots feed the best-effort drive-expansion estimate. Optional: VMs and many older hosts
+        // report none, and that must leave the fields null rather than touch the collector's status.
+        var slots = await session.QueryOptionalAsync(
+            "SELECT SlotDesignation, CurrentUsage, Status FROM Win32_SystemSlot", ct);
+        if (slots.Count > 0)
+        {
+            var free = new List<string>();
+            foreach (var s in slots)
+                if (s.GetInt("CurrentUsage") == SlotAvailable)
+                    free.Add(s.GetString("SlotDesignation") is { Length: > 0 } d ? d : "?");
+            machine.System.ExpansionSlotsTotal = slots.Count;
+            machine.System.ExpansionSlotsFree = free.Count;
+            machine.System.ExpansionSlotsFreeList = free.Count == 0 ? null : string.Join(", ", free);
         }
 
         // Last person to sign in (shown when nobody is currently logged on). From LogonUI in the registry —

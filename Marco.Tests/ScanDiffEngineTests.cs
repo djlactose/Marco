@@ -203,6 +203,35 @@ public class ScanDiffEngineTests
     }
 
     [Fact]
+    public void RamModuleSwap_InSameSlot_IsReportedWithType()
+    {
+        var older = Sample();
+        older.MemoryModules = new List<MemoryModule>
+            { new() { SlotLabel = "DIMM A", CapacityBytes = 8L << 30, MemoryTypeName = "DDR3", PartNumber = "OLD" } };
+        var newer = Sample();
+        newer.MemoryModules = new List<MemoryModule>
+            { new() { SlotLabel = "DIMM A", CapacityBytes = 16L << 30, MemoryTypeName = "DDR4", PartNumber = "NEW" } };
+
+        var changes = Assert.Single(ScanDiffEngine.Compute(Doc(older), Doc(newer)).Changed).Changes;
+        var swap = changes.Single(c => c.Item == "RAM module DIMM A");
+        Assert.Equal(DiffChangeKind.Changed, swap.Kind);
+        Assert.Equal(("8 GB DDR3 OLD", "16 GB DDR4 NEW"), (swap.OldValue, swap.NewValue));
+    }
+
+    [Fact]
+    public void RamModule_TypeAppearingAfterUpgrade_IsNotAChange()
+    {
+        // A scan saved before Marco collected memory types has no MemoryTypeName; the first diff afterwards must
+        // not flag every module.
+        var older = Sample();
+        older.MemoryModules = new List<MemoryModule> { new() { SlotLabel = "DIMM A", CapacityBytes = 8L << 30, PartNumber = "P1" } };
+        var newer = Sample();
+        newer.MemoryModules = new List<MemoryModule> { new() { SlotLabel = "DIMM A", CapacityBytes = 8L << 30, PartNumber = "P1", MemoryTypeName = "DDR4" } };
+
+        Assert.True(ScanDiffEngine.Compute(Doc(older), Doc(newer)).IsEmpty);
+    }
+
+    [Fact]
     public void Summary_CountsRegressions()
     {
         var newer = Sample();

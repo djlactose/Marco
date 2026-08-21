@@ -68,7 +68,8 @@ public static class LinuxParsers
         };
     }
 
-    /// <summary>Parse `lsblk -b -d -n -P -o NAME,SIZE,TYPE,MODEL,SERIAL` (KEY="VALUE" pairs). Disks only.</summary>
+    /// <summary>Parse `lsblk -b -d -n -P -o NAME,SIZE,TYPE,MODEL,SERIAL[,ROTA,TRAN]` (KEY="VALUE" pairs). Disks only.
+    /// ROTA gives HDD/SSD and TRAN the bus; without them (old util-linux) the media type stays the generic "Disk".</summary>
     public static List<DiskInfo> ParseLsblk(string text)
     {
         var disks = new List<DiskInfo>();
@@ -80,12 +81,28 @@ public static class LinuxParsers
             {
                 Model = kv.TryGetValue("MODEL", out var m) && m.Length > 0 ? m : null,
                 SizeBytes = kv.TryGetValue("SIZE", out var s) && long.TryParse(s, out var b) ? b : 0,
-                MediaType = "Disk",
+                MediaType = kv.TryGetValue("ROTA", out var rota) ? rota switch { "1" => "HDD", "0" => "SSD", _ => "Disk" } : "Disk",
+                BusType = kv.TryGetValue("TRAN", out var tran) ? DescribeTransport(tran) : null,
                 Serial = kv.TryGetValue("SERIAL", out var se) && se.Length > 0 ? se : null,
             });
         }
         return disks;
     }
+
+    /// <summary>lsblk TRAN values, spelled the way the Windows side spells MSFT_PhysicalDisk.BusType.</summary>
+    public static string? DescribeTransport(string? tran) => tran?.Trim().ToLowerInvariant() switch
+    {
+        null or "" => null,
+        "nvme" => "NVMe",
+        "sata" => "SATA",
+        "sas" => "SAS",
+        "usb" => "USB",
+        "ata" => "ATA",
+        "scsi" => "SCSI",
+        "virtio" => "Virtio",
+        "mmc" => "MMC",
+        var other => other.ToUpperInvariant(),
+    };
 
     /// <summary>Parse `df -B1 -T` output. Skips pseudo filesystems.</summary>
     public static List<VolumeInfo> ParseDf(string text)

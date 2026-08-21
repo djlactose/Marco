@@ -204,7 +204,12 @@ public sealed class LinuxInventoryRunner : IInventoryRunner
 
     private static void CollectStorage(ISshSession s, Machine m, CancellationToken ct)
     {
-        m.Disks = LinuxParsers.ParseLsblk(Run(s, "lsblk -b -d -n -P -o NAME,SIZE,TYPE,MODEL,SERIAL 2>/dev/null", ct));
+        // ROTA (rotational → HDD/SSD) and TRAN (bus) are absent from very old util-linux, which then rejects the
+        // whole column list — so retry with the classic columns rather than lose the disks.
+        var lsblk = Run(s, "lsblk -b -d -n -P -o NAME,SIZE,TYPE,MODEL,SERIAL,ROTA,TRAN 2>/dev/null", ct);
+        if (string.IsNullOrWhiteSpace(lsblk))
+            lsblk = Run(s, "lsblk -b -d -n -P -o NAME,SIZE,TYPE,MODEL,SERIAL 2>/dev/null", ct);
+        m.Disks = LinuxParsers.ParseLsblk(lsblk);
         m.Volumes = LinuxParsers.ParseDf(Run(s, "df -B1 -T 2>/dev/null", ct));
         m.RefreshCounts();
     }

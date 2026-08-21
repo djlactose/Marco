@@ -76,7 +76,8 @@ public sealed record MachineDto(
     ConnectFailure? ConnectFailure = null,
     bool? ConnectFailureLocalAccount = null,
     Marco.Core.Compliance.ComplianceResult? Compliance = null,
-    Marco.Core.Lifecycle.LifecycleInfo? Lifecycle = null)
+    Marco.Core.Lifecycle.LifecycleInfo? Lifecycle = null,
+    long? MaxMemoryBytes = null)
 {
     public static MachineDto From(Machine m) => new(
         m.Address, m.Name, m.Fqdn, m.DeviceType, m.IsVirtual, m.Vendor,
@@ -97,15 +98,16 @@ public sealed record MachineDto(
         m.ConnectFailure == Marco.Core.Model.ConnectFailure.None ? null : m.ConnectFailure,
         m.ConnectFailureLocalAccount ? true : null,
         m.Compliance,
-        m.Lifecycle);
+        m.Lifecycle,
+        m.MaxMemoryBytes);
 
     public Machine ToMachine()
     {
         var m = new Machine(Address) { Name = Name, Fqdn = Fqdn, DeviceType = DeviceType, IsVirtual = IsVirtual,
             Vendor = Vendor, Status = Status, StatusDetail = StatusDetail, DiscoveryMethod = DiscoveryMethod,
             IcmpTtl = IcmpTtl, LastScanned = LastScanned, TotalMemoryBytes = TotalMemoryBytes,
-            MemorySlotsUsed = MemorySlotsUsed, MemorySlotsTotal = MemorySlotsTotal, TargetBlock = TargetBlock,
-            Battery = Battery, ThermalTempC = ThermalTempC };
+            MemorySlotsUsed = MemorySlotsUsed, MemorySlotsTotal = MemorySlotsTotal, MaxMemoryBytes = MaxMemoryBytes,
+            TargetBlock = TargetBlock, Battery = Battery, ThermalTempC = ThermalTempC };
         foreach (var ip in IpAddresses) if (!m.IpAddresses.Contains(ip)) m.IpAddresses.Add(ip);
         foreach (var mac in MacAddresses) m.MacAddresses.Add(mac);
         System.ApplyTo(m.System);
@@ -146,7 +148,9 @@ public sealed record MachineDto(
 
 public sealed record SystemInfoDto(string? Manufacturer, string? Model, string? SerialNumber, string? AssetTag,
     string? ChassisType, string? Domain, bool PartOfDomain, string? LoggedOnUser, string? LastLoggedOnUser,
-    string? BiosVersion, DateTime? BiosDate, string? MotherboardManufacturer, string? MotherboardModel)
+    string? BiosVersion, DateTime? BiosDate, string? MotherboardManufacturer, string? MotherboardModel,
+    // Schema additions — optional, same rule as MachineDto.
+    int? ExpansionSlotsTotal = null, int? ExpansionSlotsFree = null, string? ExpansionSlotsFreeList = null)
 {
     public string? CurrentOrLastUser =>
         !string.IsNullOrWhiteSpace(LoggedOnUser) ? LoggedOnUser
@@ -155,7 +159,8 @@ public sealed record SystemInfoDto(string? Manufacturer, string? Model, string? 
 
     public static SystemInfoDto From(SystemInfo s) => new(s.Manufacturer, s.Model, s.SerialNumber, s.AssetTag,
         s.ChassisType, s.Domain, s.PartOfDomain, s.LoggedOnUser, s.LastLoggedOnUser, s.BiosVersion, s.BiosDate,
-        s.MotherboardManufacturer, s.MotherboardModel);
+        s.MotherboardManufacturer, s.MotherboardModel,
+        s.ExpansionSlotsTotal, s.ExpansionSlotsFree, s.ExpansionSlotsFreeList);
 
     public void ApplyTo(SystemInfo s)
     {
@@ -164,6 +169,8 @@ public sealed record SystemInfoDto(string? Manufacturer, string? Model, string? 
         s.LastLoggedOnUser = LastLoggedOnUser;
         s.BiosVersion = BiosVersion; s.BiosDate = BiosDate; s.MotherboardManufacturer = MotherboardManufacturer;
         s.MotherboardModel = MotherboardModel;
+        s.ExpansionSlotsTotal = ExpansionSlotsTotal; s.ExpansionSlotsFree = ExpansionSlotsFree;
+        s.ExpansionSlotsFreeList = ExpansionSlotsFreeList;
     }
 }
 

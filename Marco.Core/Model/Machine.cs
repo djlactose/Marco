@@ -189,10 +189,32 @@ public sealed class Machine : ObservableBase
     private long _totalMemoryBytes;
     private int _memorySlotsUsed;
     private int _memorySlotsTotal;
-    public long TotalMemoryBytes { get => _totalMemoryBytes; set { if (Set(ref _totalMemoryBytes, value)) Raise(nameof(TotalMemoryGb)); } }
-    public int MemorySlotsUsed { get => _memorySlotsUsed; set => Set(ref _memorySlotsUsed, value); }
-    public int MemorySlotsTotal { get => _memorySlotsTotal; set => Set(ref _memorySlotsTotal, value); }
+    private long? _maxMemoryBytes;
+    public long TotalMemoryBytes { get => _totalMemoryBytes; set { if (Set(ref _totalMemoryBytes, value)) { Raise(nameof(TotalMemoryGb)); Raise(nameof(MemorySummary)); } } }
+    public int MemorySlotsUsed { get => _memorySlotsUsed; set { if (Set(ref _memorySlotsUsed, value)) Raise(nameof(MemorySummary)); } }
+    public int MemorySlotsTotal { get => _memorySlotsTotal; set { if (Set(ref _memorySlotsTotal, value)) Raise(nameof(MemorySummary)); } }
+    /// <summary>Platform maximum RAM (Win32_PhysicalMemoryArray.MaxCapacityEx / MaxCapacity, converted from KB).
+    /// Null when unknown or when the firmware's figure failed the sanity check (below what is installed).</summary>
+    public long? MaxMemoryBytes { get => _maxMemoryBytes; set { if (Set(ref _maxMemoryBytes, value)) Raise(nameof(MemorySummary)); } }
     public double TotalMemoryGb => Math.Round(_totalMemoryBytes / 1024d / 1024d / 1024d, 1);
+
+    /// <summary>"16 GB, 2 of 4 slots used, max 64 GB" for the detail pane; null until memory is collected.</summary>
+    public string? MemorySummary => DescribeMemory(_totalMemoryBytes, _memorySlotsUsed, _memorySlotsTotal, _maxMemoryBytes);
+
+    /// <summary>Shared by the live model and the HTML report (which reads the DTO).</summary>
+    public static string? DescribeMemory(long totalBytes, int slotsUsed, int slotsTotal, long? maxBytes)
+    {
+        if (totalBytes <= 0) return null;
+        var s = $"{Math.Round(totalBytes / 1024d / 1024d / 1024d, 1)} GB";
+        if (slotsTotal > 0) s += $", {slotsUsed} of {slotsTotal} slot{(slotsTotal == 1 ? "" : "s")} used";
+        if (maxBytes is { } max && max > 0) s += $", max {Math.Round(max / 1024d / 1024d / 1024d, 0)} GB";
+        return s;
+    }
+
+    /// <summary>Best-effort drive-expansion estimate (see <see cref="ExpansionEstimator"/>); null on VMs and when
+    /// nothing useful is known. Refreshed with the rest of the row by <see cref="NotifyInventoryUpdated"/>.</summary>
+    public string? ExpansionOutlook => ExpansionEstimator.Describe(IsVirtual, System.ChassisType,
+        System.ExpansionSlotsFree, System.ExpansionSlotsTotal, System.ExpansionSlotsFreeList, ExpansionEstimator.CountInternal(Disks));
 
     // --- Per-collector outcomes ---
     public List<CollectorResult> Collectors { get; } = new();

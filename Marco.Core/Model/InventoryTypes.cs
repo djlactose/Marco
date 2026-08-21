@@ -17,6 +17,9 @@ public sealed class SystemInfo : ObservableBase
     private string? _motherboardManufacturer;
     private string? _motherboardModel;
     private bool _isDomainController;
+    private int? _expansionSlotsTotal;
+    private int? _expansionSlotsFree;
+    private string? _expansionSlotsFreeList;
 
     public string? Manufacturer { get => _manufacturer; set => Set(ref _manufacturer, value); }
     public string? Model { get => _model; set => Set(ref _model, value); }
@@ -44,6 +47,14 @@ public sealed class SystemInfo : ObservableBase
     /// <summary>True when the OS reports itself as a domain controller (Win32_OperatingSystem.ProductType = 2).
     /// Collectors use it to skip account enumerations that would walk the whole domain.</summary>
     public bool IsDomainController { get => _isDomainController; set => Set(ref _isDomainController, value); }
+
+    /// <summary>Board expansion slots (Win32_SystemSlot) — PCIe and, on boards that report them, M.2. Null when
+    /// the firmware exposes none (typical for VMs). Feeds the best-effort drive-expansion estimate.</summary>
+    public int? ExpansionSlotsTotal { get => _expansionSlotsTotal; set => Set(ref _expansionSlotsTotal, value); }
+    /// <summary>Slots whose CurrentUsage is Available.</summary>
+    public int? ExpansionSlotsFree { get => _expansionSlotsFree; set => Set(ref _expansionSlotsFree, value); }
+    /// <summary>Designations of the free slots, comma-joined ("PCIEX16_1, M.2_2"); null when none are free.</summary>
+    public string? ExpansionSlotsFreeList { get => _expansionSlotsFreeList; set => Set(ref _expansionSlotsFreeList, value); }
 }
 
 /// <summary>Operating system (Win32_OperatingSystem).</summary>
@@ -91,10 +102,38 @@ public sealed class CpuInfo
 public sealed class MemoryModule
 {
     public long CapacityBytes { get; set; }
+    /// <summary>Rated speed (Win32_PhysicalMemory.Speed).</summary>
     public int SpeedMhz { get; set; }
     public string? Manufacturer { get; set; }
     public string? PartNumber { get; set; }
     public string? SlotLabel { get; set; }
+    /// <summary>"DDR4" / "DDR5" / "LPDDR5" … decoded from SMBIOSMemoryType (fallback MemoryType); null when the
+    /// firmware reports Unknown, as many pre-2015 BIOSes do.</summary>
+    public string? MemoryTypeName { get; set; }
+    /// <summary>Speed the module is actually running at (ConfiguredClockSpeed); null when not reported.</summary>
+    public int? ConfiguredSpeedMhz { get; set; }
+    /// <summary>"DIMM" / "SODIMM"; null when unknown or soldered.</summary>
+    public string? FormFactor { get; set; }
+
+    /// <summary>"DDR4 · 3200 MHz (running 2933) · SODIMM" — the type facts, for the detail line.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? TypeDisplay
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(MemoryTypeName)) parts.Add(MemoryTypeName);
+            if (SpeedMhz > 0)
+            {
+                var speed = $"{SpeedMhz} MHz";
+                if (ConfiguredSpeedMhz is { } c && c > 0 && c != SpeedMhz) speed += $" (running {c})";
+                parts.Add(speed);
+            }
+            else if (ConfiguredSpeedMhz is { } c && c > 0) parts.Add($"{c} MHz");
+            if (!string.IsNullOrWhiteSpace(FormFactor)) parts.Add(FormFactor);
+            return parts.Count == 0 ? null : string.Join(" · ", parts);
+        }
+    }
 }
 
 public sealed class DiskInfo

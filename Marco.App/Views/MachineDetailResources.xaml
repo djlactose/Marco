@@ -189,8 +189,17 @@
           </ItemsControl.ItemTemplate>
         </ItemsControl>
         <TextBlock Margin="0,4,0,0"
-                   Text="{Binding TotalMemoryGb, StringFormat='Memory: {0} GB'}"
+                   Text="{Binding MemorySummary, StringFormat='Memory: {0}'}"
                    Visibility="{Binding TotalMemoryBytes, Converter={StaticResource NotEmptyToVis}}" />
+        <ItemsControl ItemsSource="{Binding MemoryModules}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <TextBlock TextWrapping="Wrap">
+                <Run Text="{Binding SlotLabel, Mode=OneWay}" /><Run Text=" — " /><Run Text="{Binding CapacityBytes, Mode=OneWay, Converter={StaticResource BytesToGb}}" /><Run Text="  " /><Run Text="{Binding TypeDisplay, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="  " /><Run Text="{Binding Manufacturer, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text=" " /><Run Text="{Binding PartNumber, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" />
+              </TextBlock>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
 
         <!-- Disks / Volumes -->
         <TextBlock Text="Storage" Style="{StaticResource SectionHeader}" Margin="0,10,0,4"
@@ -213,6 +222,9 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
+        <!-- Best-effort drive-expansion estimate (chassis + board slots + disk count); null on VMs / when unknown. -->
+        <TextBlock Text="{Binding ExpansionOutlook}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,2,0,0"
+                   Visibility="{Binding ExpansionOutlook, Converter={StaticResource NotEmptyToVis}, FallbackValue=Collapsed}" />
 
         <!-- Network -->
         <TextBlock Text="Network adapters" Style="{StaticResource SectionHeader}" Margin="0,10,0,4"

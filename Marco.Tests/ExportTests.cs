@@ -251,6 +251,64 @@ public class ExportTests
         Assert.Empty(back.OpenPorts);
     }
 
+    // --- Hardware detail: RAM type / platform max / expansion slots ---
+
+    private static Machine HardwareMachine()
+    {
+        var m = SampleMachine();
+        m.MaxMemoryBytes = 64L << 30;
+        m.MemoryModules = new List<MemoryModule>
+        {
+            new() { CapacityBytes = 8L << 30, SpeedMhz = 3200, ConfiguredSpeedMhz = 2933, MemoryTypeName = "DDR4", FormFactor = "SODIMM", SlotLabel = "DIMM A" },
+        };
+        m.System.ChassisType = "Mini Tower";
+        m.System.ExpansionSlotsTotal = 3;
+        m.System.ExpansionSlotsFree = 1;
+        m.System.ExpansionSlotsFreeList = "M.2_2";
+        return m;
+    }
+
+    [Fact]
+    public void Json_RoundTrips_HardwareDetail()
+    {
+        var json = new JsonExporter().Serialize(Doc(HardwareMachine()));
+        var back = new JsonExporter().Deserialize(json).ToMachines()[0];
+
+        Assert.Equal(64L << 30, back.MaxMemoryBytes);
+        var mod = Assert.Single(back.MemoryModules);
+        Assert.Equal("DDR4", mod.MemoryTypeName);
+        Assert.Equal(2933, mod.ConfiguredSpeedMhz);
+        Assert.Equal("SODIMM", mod.FormFactor);
+        Assert.Equal(3, back.System.ExpansionSlotsTotal);
+        Assert.Equal(1, back.System.ExpansionSlotsFree);
+        Assert.Equal("M.2_2", back.System.ExpansionSlotsFreeList);
+        Assert.NotNull(back.ExpansionOutlook);
+
+        Assert.DoesNotContain("\"TypeDisplay\"", json);     // computed, not persisted
+        Assert.DoesNotContain("\"MemorySummary\"", json);
+        Assert.DoesNotContain("\"ExpansionOutlook\"", json);
+    }
+
+    [Fact]
+    public void Json_PreviousSchema_WithoutHardwareDetail_StillOpens()
+    {
+        var json = new JsonExporter().Serialize(Doc(HardwareMachine()));
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+        var machine = node["Machines"]![0]!.AsObject();
+        machine.Remove("MaxMemoryBytes");
+        var system = machine["System"]!.AsObject();
+        foreach (var key in new[] { "ExpansionSlotsTotal", "ExpansionSlotsFree", "ExpansionSlotsFreeList" }) system.Remove(key);
+        var module = machine["MemoryModules"]![0]!.AsObject();
+        foreach (var key in new[] { "MemoryTypeName", "ConfiguredSpeedMhz", "FormFactor" }) module.Remove(key);
+
+        var back = new JsonExporter().Deserialize(node.ToJsonString()).ToMachines()[0];
+        Assert.Null(back.MaxMemoryBytes);
+        Assert.Null(back.System.ExpansionSlotsTotal);
+        Assert.Null(back.MemoryModules[0].MemoryTypeName);
+        Assert.Equal(3200, back.MemoryModules[0].SpeedMhz);
+        Assert.Equal("Mini Tower", back.System.ChassisType);
+    }
+
     [Fact]
     public void Csv_WritesCompanionFiles_AndHeadlineColumns()
     {

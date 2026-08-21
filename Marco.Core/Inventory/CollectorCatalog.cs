@@ -19,10 +19,10 @@ public static class CollectorCatalog
 {
     public static IReadOnlyList<CollectorInfo> All { get; } = new[]
     {
-        new CollectorInfo("System", "System", "Make, model, serial, asset tag, chassis, BIOS, board, domain, signed-in user.", true, true, true),
+        new CollectorInfo("System", "System", "Make, model, serial, asset tag, chassis, BIOS, board, expansion slots, domain, signed-in user.", true, true, true),
         new CollectorInfo("OperatingSystem", "Operating system", "Edition, version, build, architecture, install date, uptime.", true, true, true),
         new CollectorInfo("Cpu", "Processors", "CPU model, cores, threads, clock.", true, true, true),
-        new CollectorInfo("Memory", "Memory", "Total RAM and per-slot modules.", true, true, true),
+        new CollectorInfo("Memory", "Memory", "Total RAM, per-slot modules (type, speed, form factor), platform maximum and slot usage.", true, true, true),
         new CollectorInfo("Storage", "Storage", "Physical disks (type, bus, health, SMART, temperature) and volumes.", true, true, true),
         new CollectorInfo("Network", "Network", "Adapters, IPs, MACs, gateway, DNS, DHCP.", true, true, true),
         new CollectorInfo("Users", "Users", "Local accounts, local Administrators, user profiles, signed-in sessions (Windows); who/last (Linux).", true, true, true),

@@ -19,9 +19,12 @@ in a sortable, filterable grid and export to CSV and JSON.
 
 - **Discovery:** liveness (ICMP + TCP fallback), reverse DNS / NBNS naming, ARP MAC + OUI vendor, device type.
 - **Inventory (Windows hosts, over WMI/DCOM):** system (make/model/serial/chassis/BIOS/motherboard), OS
-  (edition/version/build/arch/install date/uptime), current-or-last logged-on user, CPU(s), memory (total +
-  per-slot), storage (physical disks with SSD/HDD/NVMe type, bus, health, SMART, temperature and wear where the
-  system exposes them; logical volumes), network adapters (IP/MAC/speed/DHCP/DNS/gateway), and
+  (edition/version/build/arch/install date/uptime), current-or-last logged-on user, CPU(s), memory (total,
+  per-module type/speed/form factor such as "DDR4 · 3200 MHz · SODIMM", slots used of total, and the platform
+  maximum the firmware reports), storage (physical disks with SSD/HDD/NVMe type, bus, health, SMART, temperature
+  and wear where the system exposes them; logical volumes), a best-effort **drive-expansion estimate** (chassis
+  type + free board slots + internal disk count — Windows does not report physical bays, so it is always labelled
+  an estimate), network adapters (IP/MAC/speed/DHCP/DNS/gateway), and
   **installed software** from the registry uninstall keys (64-bit, 32-bit, per-user), deduplicated to match
   Programs and Features. Software reads use the SMB/Remote-Registry path when available and fall back to
   StdRegProv-over-WMI when it isn't (e.g. over a VPN, or when the Remote Registry service is off).
@@ -41,7 +44,8 @@ in a sortable, filterable grid and export to CSV and JSON.
     port address), attached USB devices, battery health (full-charge vs design capacity, cycles), ACPI thermal
     zone, and — off by default — the USB storage devices ever connected.
 - **Inventory (Linux/Unix hosts, over SSH):** OS (distro/version/kernel/arch), hostname, CPU, memory, storage
-  (lsblk + df), network adapters, current/last login, and installed packages (dpkg / rpm / apk). Password auth;
+  (lsblk + df, with SSD/HDD and NVMe/SATA/USB from ROTA/TRAN), network adapters, current/last login, and
+  installed packages (dpkg / rpm / apk). Password auth;
   the runner routes by device type automatically (Windows→WMI, Linux→SSH).
 
 Each collector can be switched on or off in the left panel ("Inventory collectors"); the choice persists and is
@@ -72,7 +76,8 @@ Marco keeps and reasons about scans, not just runs them:
 - **Per-host actions & Wake-on-LAN** — right-click for RDP/SSH/web-admin/C$/ping (only where the evidence fits),
   and wake asleep hosts by MAC before a scan.
 - **Branded assessment report** — one-click client-ready HTML (executive summary, compliance donut, prioritized
-  findings, asset appendix); print to PDF.
+  findings, asset appendix plus a hardware table with RAM type/max, disk types and the expansion estimate);
+  medium-severity upgrade advisories flag mechanical internal drives and RAM with no headroom; print to PDF.
 - **Headless CLI** — `Marco.exe scan …` for Task Scheduler (see *Scheduled / headless scans* below).
 
 The itemization tool (cross-machine query), SQLite export, and AD browse remain planned for later phases.

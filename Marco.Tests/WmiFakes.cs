@@ -42,10 +42,25 @@ internal sealed class FakeWmiSession : IWmiSession
         return this;
     }
 
+    /// <summary>Simulate an older host whose class lacks a property: any SELECT naming it is rejected
+    /// (WBEM_E_INVALID_QUERY), while narrower queries against the same class still succeed.</summary>
+    public FakeWmiSession ThrowsWhenWqlContains(string fragment, WmiException? ex = null)
+    {
+        _throwWhenWqlContains.Add((fragment, ex ?? new WmiException(WmiFailureKind.Unknown, $"Invalid query: {fragment}")));
+        return this;
+    }
+
+    private readonly List<(string Fragment, WmiException Ex)> _throwWhenWqlContains = new();
+
+    public List<string> Queries { get; } = new();
+
     public Task<IReadOnlyList<WmiObject>> QueryAsync(string ns, string wql, CancellationToken ct)
     {
+        Queries.Add(wql);
         var cls = ExtractClass(wql);
         if (ThrowByClass.TryGetValue(cls, out var ex)) throw ex;
+        foreach (var (fragment, fex) in _throwWhenWqlContains)
+            if (wql.Contains(fragment, StringComparison.OrdinalIgnoreCase)) throw fex;
         IReadOnlyList<WmiObject> rows = ByClass.TryGetValue(cls, out var list) ? list : new List<WmiObject>();
         return Task.FromResult(rows);
     }

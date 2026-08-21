@@ -104,18 +104,34 @@ public sealed class HtmlReportBuilder
                     findings.Add((r.Severity == RuleSeverity.Critical ? "critical" : "high",
                         $"{who}: {Html.Encode(r.Name)}{(r.Detail is { } d ? " — " + Html.Encode(d) : "")}"));
 
-            foreach (var d in m.Disks ?? Array.Empty<Marco.Core.Model.DiskInfo>())
+            var disks = m.Disks ?? Array.Empty<Marco.Core.Model.DiskInfo>();
+            foreach (var d in disks)
                 if (d.SmartPredictFailure == true || string.Equals(d.HealthStatus, "Unhealthy", StringComparison.OrdinalIgnoreCase))
                     findings.Add(("critical", $"{who}: disk {Html.Encode(d.Model)} predicts failure"));
+
+            // Upgrade advisories (medium): a spinning internal disk, and RAM with no headroom. "HDD" only ever comes
+            // from MSFT_PhysicalDisk decoding, so the legacy "Fixed hard disk media" text on old hosts cannot match.
+            foreach (var d in disks)
+                if (string.Equals(d.MediaType, "HDD", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(d.BusType, "USB", StringComparison.OrdinalIgnoreCase))
+                    findings.Add(("medium", $"{who}: mechanical hard drive {Html.Encode(d.Model)} — SSD upgrade candidate"));
+
+            if (m.TotalMemoryBytes > 0)
+            {
+                if (m.MaxMemoryBytes is { } max && max > 0 && m.TotalMemoryBytes >= max)
+                    findings.Add(("medium", $"{who}: RAM at the reported platform maximum ({Gb(max)}) — no upgrade headroom"));
+                else if (m.MemorySlotsTotal > 0 && m.MemorySlotsUsed >= m.MemorySlotsTotal)
+                    findings.Add(("medium", $"{who}: all {m.MemorySlotsTotal} memory slots populated — a RAM upgrade means replacing modules"));
+            }
         }
 
         sb.Append("<section><h2>Attention needed</h2>");
         if (findings.Count == 0)
         {
-            sb.Append("<p class=\"muted\">No critical or high-severity findings.</p></section>");
+            sb.Append("<p class=\"muted\">No findings requiring attention.</p></section>");
             return;
         }
-        var order = new Dictionary<string, int> { ["critical"] = 0, ["high"] = 1 };
+        var order = new Dictionary<string, int> { ["critical"] = 0, ["high"] = 1, ["medium"] = 2 };
         sb.Append("<ul class=\"findings\">");
         foreach (var (sev, text) in findings.OrderBy(f => order.GetValueOrDefault(f.Sev, 9)))
             sb.Append($"<li class=\"sev-{sev}\"><span class=\"tag\">{sev}</span>{text}</li>");
@@ -142,7 +158,71 @@ public sealed class HtmlReportBuilder
             Cell(sb, m.Lifecycle?.Display);
             sb.Append("</tr>");
         }
-        sb.Append("</tbody></table></div></section>");
+        sb.Append("</tbody></table></div>");
+        AppendHardwareTable(sb, machines);
+        sb.Append("</section>");
+    }
+
+    /// <summary>Second appendix table: RAM (type, slots, platform max), disk types, and the drive-expansion
+    /// estimate. Kept separate from the asset table so its long cells do not force that one to scroll.</summary>
+    private static void AppendHardwareTable(StringBuilder sb, IReadOnlyList<MachineDto> machines)
+    {
+        sb.Append("<h3>Hardware</h3>");
+        sb.Append("<p class=\"muted\">Expansion is an estimate from chassis type, board slots and installed disks — Windows does not report physical drive bays.</p>");
+        sb.Append("<div class=\"table-scroll\"><table><thead><tr>");
+        foreach (var h in new[] { "Address", "Name", "Memory", "Memory modules", "Disks", "Expansion (estimate)" })
+            sb.Append($"<th>{h}</th>");
+        sb.Append("</tr></thead><tbody>");
+        foreach (var m in machines.OrderBy(m => m.Address))
+        {
+            sb.Append("<tr>");
+            Cell(sb, m.Address);
+            Cell(sb, m.Name);
+            Cell(sb, Marco.Core.Model.Machine.DescribeMemory(m.TotalMemoryBytes, m.MemorySlotsUsed, m.MemorySlotsTotal, m.MaxMemoryBytes));
+            WrapCell(sb, DescribeModules(m.MemoryModules));
+            WrapCell(sb, DescribeDisks(m.Disks));
+            WrapCell(sb, Marco.Core.Model.ExpansionEstimator.Describe(m.IsVirtual, m.System.ChassisType,
+                m.System.ExpansionSlotsFree, m.System.ExpansionSlotsTotal, m.System.ExpansionSlotsFreeList,
+                Marco.Core.Model.ExpansionEstimator.CountInternal(m.Disks ?? Array.Empty<Marco.Core.Model.DiskInfo>())));
+            sb.Append("</tr>");
+        }
+        sb.Append("</tbody></table></div>");
+    }
+
+    /// <summary>"2× 8 GB DDR4-3200 SODIMM; 1× 16 GB DDR4-3200 SODIMM" — identical modules grouped.</summary>
+    public static string? DescribeModules(IReadOnlyList<Marco.Core.Model.MemoryModule>? modules)
+    {
+        if (modules is null || modules.Count == 0) return null;
+        var groups = modules
+            .Select(mod => string.Join(" ", new[]
+                {
+                    Gb(mod.CapacityBytes),
+                    mod.MemoryTypeName is { Length: > 0 } t ? (mod.SpeedMhz > 0 ? $"{t}-{mod.SpeedMhz}" : t)
+                        : mod.SpeedMhz > 0 ? $"{mod.SpeedMhz} MHz" : null,
+                    mod.FormFactor,
+                }.Where(p => !string.IsNullOrWhiteSpace(p))))
+            .GroupBy(d => d)
+            .Select(g => $"{g.Count()}× {g.Key}");
+        return string.Join("; ", groups);
+    }
+
+    /// <summary>"Samsung SSD 970 500 GB (SSD · NVMe); WDC Blue 1 TB (HDD · SATA)".</summary>
+    public static string? DescribeDisks(IReadOnlyList<Marco.Core.Model.DiskInfo>? disks)
+    {
+        if (disks is null || disks.Count == 0) return null;
+        return string.Join("; ", disks.Select(d =>
+        {
+            var kind = string.Join(" · ", new[] { d.MediaType, d.BusType }.Where(p => !string.IsNullOrWhiteSpace(p)));
+            // No size for empty removable slots (card readers report 0 bytes).
+            var label = string.Join(" ", new[] { d.Model, d.SizeBytes > 0 ? Gb(d.SizeBytes) : null }.Where(p => !string.IsNullOrWhiteSpace(p)));
+            return kind.Length == 0 ? label : $"{label} ({kind})";
+        }));
+    }
+
+    private static string Gb(long bytes)
+    {
+        var gb = bytes / 1024d / 1024d / 1024d;
+        return gb >= 1000 ? $"{gb / 1024d:0.#} TB" : $"{Math.Round(gb, gb < 10 ? 1 : 0)} GB";
     }
 
     private static void AppendFooter(StringBuilder sb, ReportInput input)
@@ -157,6 +237,9 @@ public sealed class HtmlReportBuilder
         => sb.Append($"<div class=\"card\"><div class=\"num\">{Html.Encode(value)}</div><div class=\"muted\">{Html.Encode(label)}</div></div>");
 
     private static void Cell(StringBuilder sb, string? text) => sb.Append($"<td>{Html.Encode(text)}</td>");
+
+    /// <summary>A cell allowed to wrap — for the long free-text columns of the hardware table.</summary>
+    private static void WrapCell(StringBuilder sb, string? text) => sb.Append($"<td class=\"wrap\">{Html.Encode(text)}</td>");
 
     private static bool IsAlive(Marco.Core.Model.MachineStatus s)
         => s is not (Marco.Core.Model.MachineStatus.Pending or Marco.Core.Model.MachineStatus.Unreachable
@@ -200,11 +283,13 @@ public sealed class HtmlReportBuilder
         + "ul.findings li{padding:8px 12px;border-radius:6px;margin-bottom:6px;background:#fafafa;border-left:4px solid #ccc}"
         + "li.sev-critical{border-left-color:#C0392B;background:#FDECEA}"
         + "li.sev-high{border-left-color:#E67E22;background:#FEF5E7}"
+        + "li.sev-medium{border-left-color:#D4AC0D;background:#FEF9E7}"
         + ".tag{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;color:#fff;background:#999;border-radius:3px;padding:1px 6px;margin-right:8px}"
-        + "li.sev-critical .tag{background:#C0392B}li.sev-high .tag{background:#E67E22}"
+        + "li.sev-critical .tag{background:#C0392B}li.sev-high .tag{background:#E67E22}li.sev-medium .tag{background:#B7950B}"
         + ".table-scroll{overflow-x:auto}"
         + "table{border-collapse:collapse;width:100%;font-size:13px;margin-top:8px}"
         + "th,td{text-align:left;padding:6px 10px;border-bottom:1px solid #eee;white-space:nowrap}"
+        + "td.wrap{white-space:normal;min-width:180px}"
         + "th{background:#F5F6F8}"
         + "footer{margin-top:40px;border-top:1px solid #eee;padding-top:12px}"
         + "@media print{body{padding:0}h2{break-after:avoid}ul.findings li,tr{break-inside:avoid}.appendix{break-before:page}}"

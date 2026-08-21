@@ -119,9 +119,27 @@ public static class ScanDiffEngine
         Keyed(list, DiffCategory.Hardware, "RAM module",
             o.MemoryModules, n.MemoryModules,
             m => m.SlotLabel ?? $"{m.PartNumber}/{m.CapacityBytes}",
-            m => $"{Gb(m.CapacityBytes)} {m.Manufacturer} {m.PartNumber}".Trim(),
-            DiffSeverity.Notable);
+            DescribeModule,
+            DiffSeverity.Notable,
+            (om, nm) =>
+            {
+                // Same slot, different stick (an upgrade or a swap) — keyed by slot, so report it as a change.
+                // The type only takes part when both scans recorded it, so a scan saved before Marco collected
+                // memory types does not read as "every module changed".
+                var inner = new List<FieldChange>();
+                bool withType = om.MemoryTypeName is not null && nm.MemoryTypeName is not null;
+                if (!SameText(DescribeModule(om, withType), DescribeModule(nm, withType)))
+                    Add(inner, DiffCategory.Hardware, $"RAM module {nm.SlotLabel ?? "?"}",
+                        DescribeModule(om), DescribeModule(nm), DiffSeverity.Notable);
+                return inner;
+            });
     }
+
+    private static string DescribeModule(MemoryModule m) => DescribeModule(m, withType: true);
+
+    private static string DescribeModule(MemoryModule m, bool withType)
+        => string.Join(" ", new[] { Gb(m.CapacityBytes), withType ? m.MemoryTypeName : null, m.Manufacturer, m.PartNumber }
+            .Where(p => !string.IsNullOrWhiteSpace(p)));
 
     private static void CompareCpus(MachineDto o, MachineDto n, List<FieldChange> list)
     {

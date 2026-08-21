@@ -51,6 +51,27 @@ public class LinuxParsersTests
         Assert.Equal("Samsung SSD 860", disks[0].Model);
         Assert.Equal(512110190592L, disks[0].SizeBytes);
         Assert.Equal("S3Z9", disks[0].Serial);
+        Assert.Equal("Disk", disks[0].MediaType); // classic columns: no ROTA → generic
+        Assert.Null(disks[0].BusType);
+    }
+
+    [Fact]
+    public void Lsblk_RotaAndTran_GiveMediaAndBusType()
+    {
+        var text = string.Join('\n',
+            "NAME=\"nvme0n1\" SIZE=\"512110190592\" TYPE=\"disk\" MODEL=\"Samsung 980\" SERIAL=\"S1\" ROTA=\"0\" TRAN=\"nvme\"",
+            "NAME=\"sda\" SIZE=\"2000398934016\" TYPE=\"disk\" MODEL=\"WDC WD20\" SERIAL=\"S2\" ROTA=\"1\" TRAN=\"sata\"",
+            "NAME=\"sdb\" SIZE=\"64000000000\" TYPE=\"disk\" MODEL=\"Flash\" SERIAL=\"\" ROTA=\"0\" TRAN=\"usb\"",
+            "NAME=\"vda\" SIZE=\"64000000000\" TYPE=\"disk\" MODEL=\"\" SERIAL=\"\" ROTA=\"1\" TRAN=\"\"");
+        var disks = LinuxParsers.ParseLsblk(text);
+
+        Assert.Equal(4, disks.Count);
+        Assert.Equal(("SSD", "NVMe"), (disks[0].MediaType, disks[0].BusType));
+        Assert.Equal(("HDD", "SATA"), (disks[1].MediaType, disks[1].BusType));
+        Assert.Equal(("SSD", "USB"), (disks[2].MediaType, disks[2].BusType));
+        Assert.Equal("HDD", disks[3].MediaType);
+        Assert.Null(disks[3].BusType); // empty TRAN (virtio disks) → unknown bus
+        Assert.Equal("SSD · NVMe", disks[0].KindDisplay);
     }
 
     [Fact]
