@@ -118,8 +118,9 @@ public sealed class HtmlReportBuilder
 
             if (m.TotalMemoryBytes > 0)
             {
-                if (m.MaxMemoryBytes is { } max && max > 0 && m.TotalMemoryBytes >= max)
-                    findings.Add(("medium", $"{who}: RAM at the reported platform maximum ({Gb(max)}) — no upgrade headroom"));
+                var effectiveMax = SpecFor(m)?.MaxMemoryBytes ?? m.MaxMemoryBytes;
+                if (effectiveMax is { } max && max > 0 && m.TotalMemoryBytes >= max)
+                    findings.Add(("medium", $"{who}: RAM at the platform maximum ({Gb(max)}) — no upgrade headroom"));
                 else if (m.MemorySlotsTotal > 0 && m.MemorySlotsUsed >= m.MemorySlotsTotal)
                     findings.Add(("medium", $"{who}: all {m.MemorySlotsTotal} memory slots populated — a RAM upgrade means replacing modules"));
             }
@@ -168,26 +169,34 @@ public sealed class HtmlReportBuilder
     private static void AppendHardwareTable(StringBuilder sb, IReadOnlyList<MachineDto> machines)
     {
         sb.Append("<h3>Hardware</h3>");
-        sb.Append("<p class=\"muted\">Expansion is an estimate from chassis type, board slots and installed disks — Windows does not report physical drive bays.</p>");
+        sb.Append("<p class=\"muted\">Maximum memory and drive bays come from the vendor spec sheet where the model is known (\"spec sheet\"); "
+            + "otherwise the platform maximum is what the firmware reports and drive expansion is an estimate from chassis type, board slots and installed disks.</p>");
         sb.Append("<div class=\"table-scroll\"><table><thead><tr>");
-        foreach (var h in new[] { "Address", "Name", "Memory", "Memory modules", "Disks", "Expansion (estimate)" })
+        foreach (var h in new[] { "Address", "Name", "Memory", "Memory modules", "Disks", "Drive expansion" })
             sb.Append($"<th>{h}</th>");
         sb.Append("</tr></thead><tbody>");
         foreach (var m in machines.OrderBy(m => m.Address))
         {
+            var spec = SpecFor(m);
             sb.Append("<tr>");
             Cell(sb, m.Address);
             Cell(sb, m.Name);
-            Cell(sb, Marco.Core.Model.Machine.DescribeMemory(m.TotalMemoryBytes, m.MemorySlotsUsed, m.MemorySlotsTotal, m.MaxMemoryBytes));
+            WrapCell(sb, Marco.Core.Model.Machine.DescribeMemory(m.TotalMemoryBytes, m.MemorySlotsUsed, m.MemorySlotsTotal, m.MaxMemoryBytes, spec?.MaxMemoryBytes));
             WrapCell(sb, DescribeModules(m.MemoryModules));
             WrapCell(sb, DescribeDisks(m.Disks));
-            WrapCell(sb, Marco.Core.Model.ExpansionEstimator.Describe(m.IsVirtual, m.System.ChassisType,
+            WrapCell(sb, Marco.Core.Model.ExpansionEstimator.Describe(spec, m.IsVirtual, m.System.ChassisType,
                 m.System.ExpansionSlotsFree, m.System.ExpansionSlotsTotal, m.System.ExpansionSlotsFreeList,
                 Marco.Core.Model.ExpansionEstimator.CountInternal(m.Disks ?? Array.Empty<Marco.Core.Model.DiskInfo>())));
             sb.Append("</tr>");
         }
         sb.Append("</tbody></table></div>");
     }
+
+    /// <summary>Spec-sheet entry for a report row, through the same table the live model uses.</summary>
+    private static Marco.Core.Hardware.HardwareSpec? SpecFor(MachineDto m)
+        => Marco.Core.Hardware.HardwareSpecTable.Current.Match(m.System.Manufacturer, m.System.Model,
+            m.System.ProductVersion, m.System.ChassisType, m.System.MotherboardModel,
+            Marco.Core.Hardware.HardwareSpecTable.ModuleFormFactorOf(m.MemoryModules ?? Array.Empty<Marco.Core.Model.MemoryModule>()));
 
     /// <summary>"2× 8 GB DDR4-3200 SODIMM; 1× 16 GB DDR4-3200 SODIMM" — identical modules grouped.</summary>
     public static string? DescribeModules(IReadOnlyList<Marco.Core.Model.MemoryModule>? modules)
@@ -230,6 +239,8 @@ public sealed class HtmlReportBuilder
         sb.Append("<footer class=\"muted\">");
         sb.Append($"Marco {Html.Encode(input.Document.Metadata.Version)} · scan {input.Document.Metadata.Timestamp:yyyy-MM-dd HH:mm} · "
             + $"EOL data {Html.Encode(input.EolTableUpdated)}");
+        if (!string.IsNullOrWhiteSpace(input.HardwareSpecsUpdated))
+            sb.Append($" · hardware specs {Html.Encode(input.HardwareSpecsUpdated)}");
         sb.Append("</footer>");
     }
 

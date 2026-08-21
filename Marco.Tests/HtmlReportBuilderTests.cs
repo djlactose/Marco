@@ -164,7 +164,7 @@ public class HtmlReportBuilderTests
         m.MemorySlotsUsed = 4;
         var html = new HtmlReportBuilder().Build(Input(Doc(m)));
 
-        Assert.Contains("RAM at the reported platform maximum (64 GB) — no upgrade headroom", html);
+        Assert.Contains("RAM at the platform maximum (64 GB) — no upgrade headroom", html);
         Assert.DoesNotContain("memory slots populated", html);
     }
 

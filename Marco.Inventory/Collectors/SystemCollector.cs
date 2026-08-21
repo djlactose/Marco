@@ -12,15 +12,6 @@ public sealed class SystemCollector : IInventoryCollector
     /// <summary>Win32_SystemSlot.CurrentUsage: 3 = Available, 4 = In Use (1/2 = Other/Unknown are not counted free).</summary>
     private const int SlotAvailable = 3;
 
-    private static readonly string[] ChassisTypeNames =
-    {
-        "Other", "Unknown", "Desktop", "Low Profile Desktop", "Pizza Box", "Mini Tower", "Tower", "Portable",
-        "Laptop", "Notebook", "Handheld", "Docking Station", "All in One", "Sub Notebook", "Space-saving",
-        "Lunch Box", "Main System Chassis", "Expansion Chassis", "Sub Chassis", "Bus Expansion Chassis",
-        "Peripheral Chassis", "RAID Chassis", "Rack Mount Chassis", "Sealed-case PC", "Multi-system Chassis",
-        "Compact PCI", "Advanced TCA", "Blade", "Blade Enclosure", "Tablet", "Convertible", "Detachable",
-    };
-
     public async Task CollectAsync(InventoryContext context, Machine machine, CancellationToken ct)
     {
         var session = context.Wmi;
@@ -34,6 +25,16 @@ public sealed class SystemCollector : IInventoryCollector
             machine.System.Domain = cs.GetString("Domain") ?? machine.System.Domain;
             machine.System.PartOfDomain = cs.GetBool("PartOfDomain") ?? false;
             machine.System.LoggedOnUser = cs.GetString("UserName");
+        }
+
+        // Lenovo puts the machine-type code in Model and the friendly name ("ThinkPad T14 Gen 3") in
+        // ComputerSystemProduct.Version; the hardware spec lookup matches on either. Optional enrichment.
+        var product = await session.QueryOptionalAsync(
+            "SELECT Version FROM Win32_ComputerSystemProduct", ct);
+        if (product.Count > 0 && product[0].GetString("Version") is { } pv)
+        {
+            pv = pv.Trim();
+            machine.System.ProductVersion = pv.Length == 0 || IsPlaceholder(pv) ? null : pv;
         }
 
         var enc = await session.QueryFirstAsync(
@@ -98,6 +99,14 @@ public sealed class SystemCollector : IInventoryCollector
         catch { /* Remote Registry unavailable — current-user (WMI) still populated above */ }
     }
 
+    /// <summary>Firmware filler values that mean "not set".</summary>
+    private static bool IsPlaceholder(string v) => v.Equals("None", StringComparison.OrdinalIgnoreCase)
+        || v.Equals("Not Specified", StringComparison.OrdinalIgnoreCase)
+        || v.Equals("To be filled by O.E.M.", StringComparison.OrdinalIgnoreCase)
+        || v.Equals("System Version", StringComparison.OrdinalIgnoreCase)
+        || v.Equals("Default string", StringComparison.OrdinalIgnoreCase)
+        || v.Equals("x.x", StringComparison.OrdinalIgnoreCase);
+
     private static string? DescribeChassis(object? chassisTypes)
     {
         int? code = chassisTypes switch
@@ -107,8 +116,6 @@ public sealed class SystemCollector : IInventoryCollector
             string[] s when s.Length > 0 && int.TryParse(s[0], out var p) => p,
             _ => null,
         };
-        if (code is null or <= 0) return null;
-        int idx = code.Value - 1;
-        return idx >= 0 && idx < ChassisTypeNames.Length ? ChassisTypeNames[idx] : $"Type {code}";
+        return ChassisTypes.Describe(code);
     }
 }

@@ -25,6 +25,7 @@ public static class CliScanCommand
     {
         var paths = AppPaths.Resolve();
         var runLog = new RunLog(paths.RunLogFile);
+        HardwareSpecBootstrap.Install(paths);
 
         // --log gets everything; --quiet suppresses stdout progress but never the final summary/errors.
         StreamWriter? logFile = null;

@@ -24,6 +24,9 @@ public partial class App : Application
 
         var settings = SettingsStore.Load(paths.SettingsFile);
         var updater = UpdateBootstrap.Create(paths, _runLog, settings);
+        var specs = HardwareSpecBootstrap.Install(paths);
+        if (specs.OverrideError is { } specError)
+            _runLog.Note($"hardware spec override ignored ({paths.HardwareSpecsFile}): {specError}");
 
         // Any number of Marco windows may run at once (one per network is a normal way to work). Only the steps
         // that touch the exe or the crash-loop sentinel are serialised, through a short-lived cross-process gate

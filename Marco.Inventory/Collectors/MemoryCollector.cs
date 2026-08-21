@@ -30,7 +30,7 @@ public sealed class MemoryCollector : IInventoryCollector
         catch (WmiException)
         {
             modules = await session.QueryAsync(WmiQueryHelpers.CimV2,
-                "SELECT Capacity, Speed, Manufacturer, PartNumber, DeviceLocator FROM Win32_PhysicalMemory", ct);
+                "SELECT Capacity, Speed, Manufacturer, PartNumber, DeviceLocator, FormFactor FROM Win32_PhysicalMemory", ct);
         }
 
         var list = new List<MemoryModule>();

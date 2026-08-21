@@ -200,6 +200,10 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
+        <!-- What the model line supports per the bundled vendor spec table (plus the operator override file). -->
+        <TextBlock Text="{Binding SpecSheetSummary}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,2,0,0"
+                   ToolTip="{Binding Spec.Source}"
+                   Visibility="{Binding SpecSheetSummary, Converter={StaticResource NotEmptyToVis}, FallbackValue=Collapsed}" />
 
         <!-- Disks / Volumes -->
         <TextBlock Text="Storage" Style="{StaticResource SectionHeader}" Margin="0,10,0,4"

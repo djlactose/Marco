@@ -48,6 +48,8 @@ public sealed class AppPaths
     }
 
     public string SettingsFile => Path.Combine(Root, "settings.json");
+    /// <summary>Operator additions/corrections to the bundled hardware spec table (see HardwareSpecTable).</summary>
+    public string HardwareSpecsFile => Path.Combine(Root, "hardware-specs.json");
     public string CredentialsFile => Path.Combine(Root, "credentials.dat");
 
     public string LogsDirectory => Sub("logs");

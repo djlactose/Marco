@@ -198,22 +198,55 @@ public sealed class Machine : ObservableBase
     public long? MaxMemoryBytes { get => _maxMemoryBytes; set { if (Set(ref _maxMemoryBytes, value)) Raise(nameof(MemorySummary)); } }
     public double TotalMemoryGb => Math.Round(_totalMemoryBytes / 1024d / 1024d / 1024d, 1);
 
-    /// <summary>"16 GB, 2 of 4 slots used, max 64 GB" for the detail pane; null until memory is collected.</summary>
-    public string? MemorySummary => DescribeMemory(_totalMemoryBytes, _memorySlotsUsed, _memorySlotsTotal, _maxMemoryBytes);
+    /// <summary>The vendor spec-sheet entry for this model from <see cref="Marco.Core.Hardware.HardwareSpecTable.Current"/>,
+    /// or null when the model is not in the table. Looked up on read (cached in the table), never persisted.</summary>
+    public Marco.Core.Hardware.HardwareSpec? Spec => Marco.Core.Hardware.HardwareSpecTable.Current.Match(
+        System.Manufacturer, System.Model, System.ProductVersion, System.ChassisType, System.MotherboardModel,
+        Marco.Core.Hardware.HardwareSpecTable.ModuleFormFactorOf(MemoryModules));
 
-    /// <summary>Shared by the live model and the HTML report (which reads the DTO).</summary>
-    public static string? DescribeMemory(long totalBytes, int slotsUsed, int slotsTotal, long? maxBytes)
+    /// <summary>Platform maximum to reason with: the spec sheet when the model is known (firmware figures are often
+    /// stale or capped), otherwise what the firmware reported.</summary>
+    public long? EffectiveMaxMemoryBytes => Spec?.MaxMemoryBytes ?? _maxMemoryBytes;
+
+    /// <summary>"16 GB, 2 of 4 slots used, max 64 GB" for the detail pane; null until memory is collected.</summary>
+    public string? MemorySummary => DescribeMemory(_totalMemoryBytes, _memorySlotsUsed, _memorySlotsTotal, _maxMemoryBytes, Spec?.MaxMemoryBytes);
+
+    /// <summary>Shared by the live model and the HTML report (which reads the DTO). The spec-sheet maximum wins when
+    /// known and says so; a differing firmware figure is noted rather than hidden.</summary>
+    public static string? DescribeMemory(long totalBytes, int slotsUsed, int slotsTotal, long? firmwareMaxBytes, long? specMaxBytes = null)
     {
         if (totalBytes <= 0) return null;
         var s = $"{Math.Round(totalBytes / 1024d / 1024d / 1024d, 1)} GB";
         if (slotsTotal > 0) s += $", {slotsUsed} of {slotsTotal} slot{(slotsTotal == 1 ? "" : "s")} used";
-        if (maxBytes is { } max && max > 0) s += $", max {Math.Round(max / 1024d / 1024d / 1024d, 0)} GB";
+        if (specMaxBytes is { } spec && spec > 0)
+        {
+            s += $", max {Gb(spec)} GB (spec sheet";
+            if (firmwareMaxBytes is { } fw && fw > 0 && Gb(fw) != Gb(spec)) s += $"; firmware reports {Gb(fw)} GB";
+            s += ")";
+        }
+        else if (firmwareMaxBytes is { } max && max > 0) s += $", max {Gb(max)} GB";
         return s;
+
+        static double Gb(long b) => Math.Round(b / 1024d / 1024d / 1024d, 0);
     }
 
-    /// <summary>Best-effort drive-expansion estimate (see <see cref="ExpansionEstimator"/>); null on VMs and when
-    /// nothing useful is known. Refreshed with the rest of the row by <see cref="NotifyInventoryUpdated"/>.</summary>
-    public string? ExpansionOutlook => ExpansionEstimator.Describe(IsVirtual, System.ChassisType,
+    /// <summary>"Dell OptiPlex 7090 SFF spec sheet: DDR4 DIMM, 4 slots, max 128 GB · 2× 2.5″/3.5″ bays, 2× M.2"
+    /// — what the model line supports, for the detail pane; null when the model is not in the table.</summary>
+    public string? SpecSheetSummary => DescribeSpec(Spec, System.Manufacturer, System.Model);
+
+    public static string? DescribeSpec(Marco.Core.Hardware.HardwareSpec? spec, string? manufacturer, string? model)
+    {
+        if (spec is null) return null;
+        var facts = new[] { spec.MemoryDisplay, spec.BaysDisplay }.Where(f => !string.IsNullOrWhiteSpace(f)).ToList();
+        if (facts.Count == 0) return null;
+        var name = spec.Name ?? string.Join(" ", new[] { manufacturer, model }.Where(p => !string.IsNullOrWhiteSpace(p)));
+        return $"{name} spec sheet: {string.Join(" · ", facts)}";
+    }
+
+    /// <summary>Drive-expansion outlook: from the spec sheet's bay count when the model is known, otherwise the
+    /// best-effort estimate (see <see cref="ExpansionEstimator"/>); null on VMs and when nothing useful is known.
+    /// Refreshed with the rest of the row by <see cref="NotifyInventoryUpdated"/>.</summary>
+    public string? ExpansionOutlook => ExpansionEstimator.Describe(Spec, IsVirtual, System.ChassisType,
         System.ExpansionSlotsFree, System.ExpansionSlotsTotal, System.ExpansionSlotsFreeList, ExpansionEstimator.CountInternal(Disks));
 
     // --- Per-collector outcomes ---

@@ -12,7 +12,7 @@ public static class ExpansionEstimator
     private static readonly string[] Portable =
         { "Portable", "Laptop", "Notebook", "Sub Notebook", "Handheld", "Tablet", "Convertible", "Detachable" };
     private static readonly string[] Compact =
-        { "All in One", "Space-saving", "Low Profile Desktop", "Sealed-case PC", "Lunch Box" };
+        { "All in One", "Space-saving", "Low Profile Desktop", "Sealed-case PC", "Lunch Box", "Mini PC", "Stick PC", "Embedded PC" };
     private static readonly string[] Tower =
         { "Desktop", "Mini Tower", "Tower", "Main System Chassis", "Pizza Box" };
     private static readonly string[] Server =
@@ -21,6 +21,24 @@ public static class ExpansionEstimator
     /// <summary>Disks that occupy a bay or slot — everything except USB-attached (external drives, card readers).</summary>
     public static int CountInternal(IEnumerable<DiskInfo> disks)
         => disks.Count(d => !string.Equals(d.BusType, "USB", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Spec-sheet bays when the model is known (a count, not a guess — though which bay each disk occupies
+    /// is not, hence "up to"); otherwise the chassis/slot estimate.</summary>
+    public static string? Describe(Marco.Core.Hardware.HardwareSpec? spec, bool isVirtual, string? chassisType,
+        int? slotsFree, int? slotsTotal, string? freeSlotNames, int internalDiskCount)
+    {
+        if (isVirtual) return null;
+        if (spec is { HasBayFacts: true } && spec.TotalStoragePositions is { } total)
+        {
+            var disks = internalDiskCount == 1 ? "1 internal disk installed" : $"{internalDiskCount} internal disks installed";
+            if (total == 0) return $"Spec sheet: no internal drive bays — {disks}, no room for additional drives.";
+            var free = Math.Max(0, total - internalDiskCount);
+            return free == 0
+                ? $"Spec sheet: {spec.BaysDisplay} — {disks}, all positions in use."
+                : $"Spec sheet: {spec.BaysDisplay} — {disks}, up to {free} free.";
+        }
+        return Describe(isVirtual, chassisType, slotsFree, slotsTotal, freeSlotNames, internalDiskCount);
+    }
 
     public static string? Describe(bool isVirtual, string? chassisType,
         int? slotsFree, int? slotsTotal, string? freeSlotNames, int internalDiskCount)

@@ -33,7 +33,8 @@ public partial class MainViewModel
         var fleet = ComplianceEvaluator.Summarize(MachinesView.Cast<Marco.Core.Model.Machine>());
         var input = new ReportInput(doc, fleet, branding,
             string.IsNullOrWhiteSpace(dialog.ReportTitle) ? client?.Name : dialog.ReportTitle,
-            DateTime.Now, Marco.Core.Lifecycle.OsEolTable.Data.Updated, dialog.IncludeAppendix);
+            DateTime.Now, Marco.Core.Lifecycle.OsEolTable.Data.Updated, dialog.IncludeAppendix,
+            Marco.Core.Hardware.HardwareSpecTable.Current.Updated);
 
         try
         {

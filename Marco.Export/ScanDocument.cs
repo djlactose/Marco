@@ -150,7 +150,8 @@ public sealed record SystemInfoDto(string? Manufacturer, string? Model, string? 
     string? ChassisType, string? Domain, bool PartOfDomain, string? LoggedOnUser, string? LastLoggedOnUser,
     string? BiosVersion, DateTime? BiosDate, string? MotherboardManufacturer, string? MotherboardModel,
     // Schema additions — optional, same rule as MachineDto.
-    int? ExpansionSlotsTotal = null, int? ExpansionSlotsFree = null, string? ExpansionSlotsFreeList = null)
+    int? ExpansionSlotsTotal = null, int? ExpansionSlotsFree = null, string? ExpansionSlotsFreeList = null,
+    string? ProductVersion = null)
 {
     public string? CurrentOrLastUser =>
         !string.IsNullOrWhiteSpace(LoggedOnUser) ? LoggedOnUser
@@ -160,7 +161,7 @@ public sealed record SystemInfoDto(string? Manufacturer, string? Model, string? 
     public static SystemInfoDto From(SystemInfo s) => new(s.Manufacturer, s.Model, s.SerialNumber, s.AssetTag,
         s.ChassisType, s.Domain, s.PartOfDomain, s.LoggedOnUser, s.LastLoggedOnUser, s.BiosVersion, s.BiosDate,
         s.MotherboardManufacturer, s.MotherboardModel,
-        s.ExpansionSlotsTotal, s.ExpansionSlotsFree, s.ExpansionSlotsFreeList);
+        s.ExpansionSlotsTotal, s.ExpansionSlotsFree, s.ExpansionSlotsFreeList, s.ProductVersion);
 
     public void ApplyTo(SystemInfo s)
     {
@@ -170,7 +171,7 @@ public sealed record SystemInfoDto(string? Manufacturer, string? Model, string? 
         s.BiosVersion = BiosVersion; s.BiosDate = BiosDate; s.MotherboardManufacturer = MotherboardManufacturer;
         s.MotherboardModel = MotherboardModel;
         s.ExpansionSlotsTotal = ExpansionSlotsTotal; s.ExpansionSlotsFree = ExpansionSlotsFree;
-        s.ExpansionSlotsFreeList = ExpansionSlotsFreeList;
+        s.ExpansionSlotsFreeList = ExpansionSlotsFreeList; s.ProductVersion = ProductVersion;
     }
 }
 

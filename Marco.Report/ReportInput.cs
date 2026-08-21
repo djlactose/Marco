@@ -23,4 +23,6 @@ public sealed record ReportInput(
     string? ClientName,
     DateTime GeneratedAt,
     string EolTableUpdated,
-    bool IncludeAppendix = true);
+    bool IncludeAppendix = true,
+    // Snapshot date of the bundled hardware spec table, for the footer; null hides it.
+    string? HardwareSpecsUpdated = null);

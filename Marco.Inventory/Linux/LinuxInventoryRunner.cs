@@ -178,13 +178,22 @@ public sealed class LinuxInventoryRunner : IInventoryRunner
     private static void CollectSystem(ISshSession s, Machine m, CancellationToken ct)
     {
         // DMI files; serial usually needs root (may be empty / "None").
-        var text = Run(s, "for f in sys_vendor product_name product_serial board_vendor; do printf '%s=%s\\n' \"$f\" \"$(cat /sys/class/dmi/id/$f 2>/dev/null)\"; done", ct);
+        var text = Run(s, "for f in sys_vendor product_name product_version product_serial board_vendor board_name chassis_type; do printf '%s=%s\\n' \"$f\" \"$(cat /sys/class/dmi/id/$f 2>/dev/null)\"; done", ct);
         var map = LinuxParsers.ParseOsRelease(text); // KEY=VALUE parser works here too
-        string? Clean(string k) => map.TryGetValue(k, out var v) && v.Length > 0 && !v.Equals("None", StringComparison.OrdinalIgnoreCase) ? v : null;
+        string? Clean(string k) => map.TryGetValue(k, out var v) && v.Length > 0
+            && !v.Equals("None", StringComparison.OrdinalIgnoreCase)
+            && !v.Equals("Not Specified", StringComparison.OrdinalIgnoreCase)
+            && !v.Equals("To be filled by O.E.M.", StringComparison.OrdinalIgnoreCase)
+            && !v.Equals("Default string", StringComparison.OrdinalIgnoreCase) ? v : null;
         m.System.Manufacturer = Clean("sys_vendor");
         m.System.Model = Clean("product_name");
+        m.System.ProductVersion = Clean("product_version");
         m.System.SerialNumber = Clean("product_serial");
         m.System.MotherboardManufacturer = Clean("board_vendor");
+        m.System.MotherboardModel = Clean("board_name");
+        // chassis_type is the bare SMBIOS code ("10"); same table as the Windows side, so the expansion
+        // estimate and the spec lookup work for Linux hosts too.
+        m.System.ChassisType = ChassisTypes.Describe(int.TryParse(Clean("chassis_type"), out var ch) ? ch : null);
     }
 
     private static void CollectCpu(ISshSession s, Machine m, CancellationToken ct)

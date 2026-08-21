@@ -67,6 +67,14 @@ Marco keeps and reasons about scans, not just runs them:
   Null inputs read *unknown*, never *fail*. Extend or retune with your own JSON packs in `Marco.Data\compliance\`.
 - **Lifecycle / EOL** — a bundled table flags operating systems past or nearing end of support, plus approximate
   hardware age from the BIOS date (refresh with `build\refresh-eol.ps1`).
+- **Hardware spec lookup** — a bundled vendor spec-sheet table (Dell OptiPlex/Latitude/Precision/Vostro/PowerEdge,
+  HP EliteDesk/ProDesk/Elite/Pro/Z2/EliteBook/ProBook/ZBook, Lenovo ThinkCentre/ThinkStation/ThinkPad, Surface)
+  keyed by make + model tells you what the model *line* supports: memory type, slot count, platform maximum, and
+  internal drive bays / M.2 slots. Where a model is known, the detail pane and report use the spec-sheet maximum
+  (noting the firmware's figure when it differs) and replace the bay *estimate* with a real count — which is also
+  how Linux hosts, whose SMBIOS tables need root, get RAM specs. Add or correct models in `hardware-specs.json`
+  beside `settings.json` (Marco writes a commented starter file on first run; restart after editing). Entries
+  transcribed from vendor manuals are marked "verified" in their `Source`.
 - **Known-device baseline** — bless a scan as the set of known devices; later scans flag anything new (a rogue
   Raspberry Pi jumps out), with a *NEW?* state for Wi-Fi MAC randomization that inventory resolves.
 - **Prerequisite doctor** — when inventory fails, a per-host "why" with a copy-paste fix, and a fleet rollup

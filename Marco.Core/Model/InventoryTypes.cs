@@ -5,6 +5,7 @@ public sealed class SystemInfo : ObservableBase
 {
     private string? _manufacturer;
     private string? _model;
+    private string? _productVersion;
     private string? _serialNumber;
     private string? _assetTag;
     private string? _chassisType;
@@ -23,6 +24,9 @@ public sealed class SystemInfo : ObservableBase
 
     public string? Manufacturer { get => _manufacturer; set => Set(ref _manufacturer, value); }
     public string? Model { get => _model; set => Set(ref _model, value); }
+    /// <summary>Win32_ComputerSystemProduct.Version / DMI product_version — the friendly product name on Lenovo
+    /// ("ThinkCentre M70q Gen 2"), where Model is the machine-type code. Null when the firmware left it blank.</summary>
+    public string? ProductVersion { get => _productVersion; set => Set(ref _productVersion, value); }
     public string? SerialNumber { get => _serialNumber; set => Set(ref _serialNumber, value); }
     public string? AssetTag { get => _assetTag; set => Set(ref _assetTag, value); }
     public string? ChassisType { get => _chassisType; set => Set(ref _chassisType, value); }
