@@ -91,6 +91,10 @@ public static class CliScanCommand
                     : scoped;
                 if (options.CredentialLabel is not null && candidates.Count == 0)
                 { Error($"No credential labelled '{options.CredentialLabel}'."); return (int)CliExitCode.Usage; }
+                // Same default as the interactive app: printers/network gear get the "public" community unless
+                // the operator configured an SNMP credential (or pinned a specific credential by label).
+                if (options.CredentialLabel is null && !candidates.Any(c => c.Kind == CredentialKind.Snmp))
+                    candidates = candidates.Append(CredentialSet.SnmpDefault().ToCandidate()).ToList();
             }
 
             var settings = new ScanSettings
@@ -109,6 +113,7 @@ public static class CliScanCommand
                 DiscoveryFactory.CreateController(),
                 InventoryFactory.CreateRunner(),
                 InventoryFactory.CreateLinuxRunner(),
+                InventoryFactory.CreateSnmpRunner(),
                 Log);
             var result = await session.RunAsync(scanTargets, settings, candidates, enabled,
                 inventory: !options.NoInventory, includeUnreachable: false, ct).ConfigureAwait(false);

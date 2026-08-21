@@ -77,7 +77,9 @@ public sealed record MachineDto(
     bool? ConnectFailureLocalAccount = null,
     Marco.Core.Compliance.ComplianceResult? Compliance = null,
     Marco.Core.Lifecycle.LifecycleInfo? Lifecycle = null,
-    long? MaxMemoryBytes = null)
+    long? MaxMemoryBytes = null,
+    PrinterDevice? Printer = null,
+    NetworkDeviceInfo? NetworkDevice = null)
 {
     public static MachineDto From(Machine m) => new(
         m.Address, m.Name, m.Fqdn, m.DeviceType, m.IsVirtual, m.Vendor,
@@ -99,7 +101,9 @@ public sealed record MachineDto(
         m.ConnectFailureLocalAccount ? true : null,
         m.Compliance,
         m.Lifecycle,
-        m.MaxMemoryBytes);
+        m.MaxMemoryBytes,
+        m.Printer,
+        m.NetworkDevice);
 
     public Machine ToMachine()
     {
@@ -141,6 +145,8 @@ public sealed record MachineDto(
         if (ConnectFailureLocalAccount is { } la) m.ConnectFailureLocalAccount = la;
         if (Compliance is not null) m.Compliance = Compliance;
         if (Lifecycle is not null) m.Lifecycle = Lifecycle;
+        if (Printer is not null) m.Printer = Printer;
+        if (NetworkDevice is not null) m.NetworkDevice = NetworkDevice;
         m.RefreshCounts();
         return m;
     }

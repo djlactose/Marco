@@ -123,6 +123,24 @@ public sealed class HtmlReportBuilder
                 else if (m.MemorySlotsTotal > 0 && m.MemorySlotsUsed >= m.MemorySlotsTotal)
                     findings.Add(("medium", $"{who}: all {m.MemorySlotsTotal} memory slots populated — a RAM upgrade means replacing modules"));
             }
+
+            // Printers (SNMP / IPP): conditions that stop printing are high; low consumables are a medium advisory.
+            if (m.Printer is { } pr)
+            {
+                foreach (var state in pr.ErrorStates.Where(Marco.Core.Model.PrinterErrorStates.IsBlocking))
+                    findings.Add(("high", $"{who}: {Html.Encode(state.ToLowerInvariant())}"));
+                if (string.Equals(pr.DeviceStatus, "Down", StringComparison.OrdinalIgnoreCase))
+                    findings.Add(("high", $"{who}: printer reports itself down"));
+                else if (string.Equals(pr.IppState, "stopped", StringComparison.OrdinalIgnoreCase))
+                    findings.Add(("high", $"{who}: printer stopped{(pr.IppStateReasons.Count > 0 ? " — " + Html.Encode(string.Join(", ", pr.IppStateReasons)) : "")}"));
+                foreach (var s in pr.Supplies)
+                {
+                    if (s.IsEmpty)
+                        findings.Add(("high", $"{who}: {Html.Encode(s.Name)} {(s.IsReceptacle ? "is full" : "is empty")} — replace now"));
+                    else if (s.IsLow)
+                        findings.Add(("medium", $"{who}: {Html.Encode(s.Name)} at {Html.Encode(s.LevelDisplay)} — {(s.IsReceptacle ? "nearly full, replace soon" : "replace soon")}"));
+                }
+            }
         }
 
         sb.Append("<section><h2>Attention needed</h2>");
@@ -160,7 +178,37 @@ public sealed class HtmlReportBuilder
         }
         sb.Append("</tbody></table></div>");
         AppendHardwareTable(sb, machines);
+        AppendPrinterTable(sb, machines);
         sb.Append("</section>");
+    }
+
+    /// <summary>Third appendix table, only when the scan holds printer devices: model, serial, status, the
+    /// compact supply line, page count and queue depth (printer's own queue plus any Windows print servers).</summary>
+    public static void AppendPrinterTable(StringBuilder sb, IReadOnlyList<MachineDto> machines)
+    {
+        var printers = machines.Where(m => m.Printer is not null).OrderBy(m => m.Address).ToList();
+        if (printers.Count == 0) return;
+        sb.Append("<h3>Printers</h3>");
+        sb.Append("<p class=\"muted\">Read from the printers over SNMP (Printer MIB) and IPP. Supply percentages are as the device reports them; \"some remaining\" means the engine only reports a non-empty flag.</p>");
+        sb.Append("<div class=\"table-scroll\"><table><thead><tr>");
+        foreach (var h in new[] { "Address", "Name", "Model", "Serial", "Status", "Supplies", "Pages", "Queued" })
+            sb.Append($"<th>{h}</th>");
+        sb.Append("</tr></thead><tbody>");
+        foreach (var m in printers)
+        {
+            var p = m.Printer!;
+            sb.Append("<tr>");
+            Cell(sb, m.Address);
+            Cell(sb, m.Name);
+            Cell(sb, string.Join(" ", new[] { m.System.Manufacturer, m.System.Model }.Where(s => !string.IsNullOrWhiteSpace(s))));
+            Cell(sb, m.System.SerialNumber);
+            WrapCell(sb, string.Join(" · ", new[] { p.Status }.Concat(p.ErrorStates).Where(s => !string.IsNullOrWhiteSpace(s))));
+            WrapCell(sb, p.SuppliesSummary ?? (p.Supplies.Count > 0 ? string.Join(" · ", p.Supplies.Select(s => $"{s.ShortName} {s.LevelDisplay}")) : null));
+            Cell(sb, p.TotalPages is { } pages ? pages.ToString("N0") : null);
+            Cell(sb, p.QueuedJobs is { } q ? q.ToString() : null);
+            sb.Append("</tr>");
+        }
+        sb.Append("</tbody></table></div>");
     }
 
     /// <summary>Second appendix table: RAM (type, slots, platform max), disk types, and the drive-expansion

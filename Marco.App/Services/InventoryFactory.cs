@@ -20,8 +20,12 @@ public static class InventoryFactory
     /// <summary>SSH-based inventory for Linux/Unix hosts.</summary>
     public static LinuxInventoryRunner CreateLinuxRunner() => new(new SshNetSessionFactory());
 
-    /// <summary>A verifier that tests credentials via the same WMI or SSH path inventory uses (shorter timeout
-    /// for snappier feedback).</summary>
+    /// <summary>SNMP + IPP inventory for printers and network devices.</summary>
+    public static Marco.Inventory.Snmp.SnmpDeviceInventoryRunner CreateSnmpRunner() =>
+        new(new Marco.Inventory.Snmp.SnmpSessionFactory(), new Marco.Inventory.Ipp.HttpIppClient());
+
+    /// <summary>A verifier that tests credentials via the same WMI, SSH or SNMP path inventory uses (shorter
+    /// timeout for snappier feedback).</summary>
     public static CredentialVerifier CreateVerifier() =>
-        new(new SystemManagementWmiSessionFactory(timeoutSeconds: 15), new SshNetSessionFactory());
+        new(new SystemManagementWmiSessionFactory(timeoutSeconds: 15), new SshNetSessionFactory(), new Marco.Inventory.Snmp.SnmpSessionFactory());
 }

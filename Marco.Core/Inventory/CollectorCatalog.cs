@@ -8,7 +8,9 @@ public sealed record CollectorInfo(
     string Description,
     bool DefaultEnabled,
     bool Windows,
-    bool Linux);
+    bool Linux,
+    bool Printer = false,
+    bool NetworkDevice = false);
 
 /// <summary>
 /// The catalogue of collectors the UI offers, in display order. Lives in Core (BCL only) so the app, the runners
@@ -19,12 +21,12 @@ public static class CollectorCatalog
 {
     public static IReadOnlyList<CollectorInfo> All { get; } = new[]
     {
-        new CollectorInfo("System", "System", "Make, model, serial, asset tag, chassis, BIOS, board, expansion slots, domain, signed-in user.", true, true, true),
+        new CollectorInfo("System", "System", "Make, model, serial, asset tag, chassis, BIOS, board, expansion slots, domain, signed-in user.", true, true, true, Printer: true, NetworkDevice: true),
         new CollectorInfo("OperatingSystem", "Operating system", "Edition, version, build, architecture, install date, uptime.", true, true, true),
         new CollectorInfo("Cpu", "Processors", "CPU model, cores, threads, clock.", true, true, true),
         new CollectorInfo("Memory", "Memory", "Total RAM, per-slot modules (type, speed, form factor), platform maximum and slot usage.", true, true, true),
         new CollectorInfo("Storage", "Storage", "Physical disks (type, bus, health, SMART, temperature) and volumes.", true, true, true),
-        new CollectorInfo("Network", "Network", "Adapters, IPs, MACs, gateway, DNS, DHCP.", true, true, true),
+        new CollectorInfo("Network", "Network", "Adapters, IPs, MACs, gateway, DNS, DHCP.", true, true, true, Printer: true, NetworkDevice: true),
         new CollectorInfo("Users", "Users", "Local accounts, local Administrators, user profiles, signed-in sessions (Windows); who/last (Linux).", true, true, true),
         new CollectorInfo("Updates", "Updates & servicing", "Installed hotfixes, feature release and full build, pending reboot, WSUS policy.", true, true, false),
         new CollectorInfo("Security", "Security posture", "Antivirus/Defender, firewall, BitLocker, TPM, Secure Boot, UAC, RDP/NLA, SMB1/signing, VBS, LAPS.", true, true, false),
@@ -33,6 +35,11 @@ public static class CollectorCatalog
         new CollectorInfo("InstalledSoftware", "Installed software", "Programs and Features (Windows) or distro packages (Linux). The slowest collector.", true, true, true),
         new CollectorInfo("ScheduledTasks", "Scheduled tasks", "Non-Microsoft scheduled tasks and the account they run as. Slower; off by default.", false, true, false),
         new CollectorInfo("UsbHistory", "USB storage history", "USB storage devices that have ever been connected (registry). Off by default.", false, true, false),
+        new CollectorInfo("PrinterStatus", "Printer status", "Printer state, error flags (jam, door, out of toner), front-panel text, alerts and covers, over SNMP.", true, false, false, Printer: true),
+        new CollectorInfo("Supplies", "Printer supplies", "Toner / ink / drum / fuser levels (Printer MIB, with IPP as fallback).", true, false, false, Printer: true),
+        new CollectorInfo("PageCounts", "Page counts", "Engine page counter and vendor colour / mono counters.", true, false, false, Printer: true),
+        new CollectorInfo("Trays", "Paper trays", "Input trays: name, media, fill level.", true, false, false, Printer: true),
+        new CollectorInfo("PrintQueue", "Print queue (IPP)", "Jobs waiting on the printer, IPP state and reasons, firmware — over IPP on port 631, no credentials.", true, false, false, Printer: true),
     };
 
     public static ISet<string> DefaultEnabledNames()

@@ -253,6 +253,10 @@ public sealed class PrinterEntry
     /// <summary>IP/host of a TCP/IP printer port, so the entry can be matched to a discovered printer.</summary>
     public string? HostAddress { get; set; }
     public string? Status { get; set; }
+    /// <summary>Jobs currently in this queue on the host (Win32_PrintJob); null when the class wasn't readable.</summary>
+    public int? QueuedJobs { get; set; }
+    /// <summary>Decoded Win32_Printer.PrinterState flags ("Paused", "Error", "Paper jam", …); null when none.</summary>
+    public string? PrinterState { get; set; }
 }
 
 public sealed class UsbDeviceEntry

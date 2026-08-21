@@ -30,6 +30,8 @@ public sealed class CsvExporter
         written.Add(WriteMonitors(doc, Path.Combine(directory, "monitors.csv")));
         written.Add(WriteGpus(doc, Path.Combine(directory, "gpus.csv")));
         written.Add(WritePrinters(doc, Path.Combine(directory, "printers.csv")));
+        written.Add(WritePrinterDevices(doc, Path.Combine(directory, "printer-devices.csv")));
+        written.Add(WritePrinterSupplies(doc, Path.Combine(directory, "printer-supplies.csv")));
         written.Add(WriteUsb(doc, Path.Combine(directory, "usb.csv")));
         written.Add(WriteCompliance(doc, Path.Combine(directory, "compliance.csv")));
 
@@ -225,11 +227,44 @@ public sealed class CsvExporter
     private string WritePrinters(ScanDocument doc, string path)
     {
         var sb = new StringBuilder();
-        Row(sb, "MachineAddress", "MachineName", "Printer", "Default", "Port", "HostAddress", "Driver", "Shared", "ShareName", "Network", "Location", "Status");
+        Row(sb, "MachineAddress", "MachineName", "Printer", "Default", "Port", "HostAddress", "Driver", "Shared", "ShareName", "Network", "Location", "Status", "QueuedJobs", "State");
         foreach (var m in doc.Machines)
             foreach (var p in m.Printers ?? Array.Empty<Marco.Core.Model.PrinterEntry>())
                 Row(sb, m.Address, m.Name, p.Name, YesNo(p.IsDefault), p.PortName, p.HostAddress, p.DriverName, YesNo(p.Shared),
-                    p.ShareName, YesNo(p.IsNetwork), p.Location, p.Status);
+                    p.ShareName, YesNo(p.IsNetwork), p.Location, p.Status, Num(p.QueuedJobs), p.PrinterState);
+        return Write(path, sb);
+    }
+
+    /// <summary>One row per printer device (SNMP/IPP inventory) — the device itself, not a Windows queue.</summary>
+    private string WritePrinterDevices(ScanDocument doc, string path)
+    {
+        var sb = new StringBuilder();
+        Row(sb, "MachineAddress", "MachineName", "Manufacturer", "Model", "Serial", "Status", "DeviceStatus", "ErrorStates",
+            "Pages", "QueuedJobs", "IppState", "IppStateReasons", "Firmware", "Location", "Contact", "Supplies", "LowSupplies", "Sources");
+        foreach (var m in doc.Machines)
+        {
+            if (m.Printer is not { } p) continue;
+            Row(sb, m.Address, m.Name, m.System.Manufacturer, m.System.Model, m.System.SerialNumber, p.Status, p.DeviceStatus,
+                string.Join("; ", p.ErrorStates), Num(p.TotalPages), Num(p.QueuedJobs), p.IppState, string.Join("; ", p.IppStateReasons),
+                p.Firmware, p.Location, p.Contact, p.SuppliesSummary,
+                string.Join("; ", p.Supplies.Where(s => s.IsLow || s.IsEmpty).Select(s => $"{s.Name}: {s.LevelDisplay}")),
+                string.Join("; ", p.Sources));
+        }
+        return Write(path, sb);
+    }
+
+    /// <summary>One row per supply (toner / ink / drum / fuser / waste) across every printer device.</summary>
+    private string WritePrinterSupplies(ScanDocument doc, string path)
+    {
+        var sb = new StringBuilder();
+        Row(sb, "MachineAddress", "MachineName", "Supply", "Type", "Colorant", "Level", "Max", "Unit", "Percent", "LevelDisplay", "Low", "Empty", "Receptacle");
+        foreach (var m in doc.Machines)
+        {
+            if (m.Printer is not { } p) continue;
+            foreach (var s in p.Supplies)
+                Row(sb, m.Address, m.Name, s.Name, s.Type, s.Colorant, Num(s.Level), Num(s.MaxCapacity), s.Unit, Num(s.Percent),
+                    s.LevelDisplay, YesNo(s.IsLow), YesNo(s.IsEmpty), YesNo(s.IsReceptacle));
+        }
         return Write(path, sb);
     }
 
@@ -318,6 +353,7 @@ public sealed class CsvExporter
            && !string.Equals(s.State, "Running", StringComparison.OrdinalIgnoreCase);
 
     private static string Num(int? n) => n?.ToString(CultureInfo.InvariantCulture) ?? "";
+    private static string Num(long? n) => n?.ToString(CultureInfo.InvariantCulture) ?? "";
     private static string YesNo(bool? b) => b switch { true => "Yes", false => "No", _ => "" };
     private static string Date(DateTime? d) => d?.ToString("yyyy-MM-dd") ?? "";
     private static string DateTime2(DateTime? d) => d?.ToString("yyyy-MM-dd HH:mm:ss") ?? "";

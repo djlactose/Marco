@@ -76,14 +76,23 @@ public static class ComplianceEvaluator
 
     private static bool Applies(Machine m, RuleAppliesTo? a)
     {
-        if (a is null) return true;
-
         bool isWindows = m.DeviceType is DeviceType.Windows or DeviceType.WindowsServer;
         bool isLinux = m.DeviceType == DeviceType.UnixLinux;
-        switch (a.Os?.ToLowerInvariant())
+        bool isPrinter = m.DeviceType == DeviceType.Printer;
+        bool isDevice = isPrinter || m.DeviceType == DeviceType.NetworkDevice;
+        var os = a?.Os?.ToLowerInvariant();
+
+        // Printers and network gear only take rules written for them ("printer"); every computer-oriented rule
+        // (including unscoped ones) is NotApplicable there, otherwise they'd all read Unknown against an empty
+        // security posture.
+        if (isDevice) return os == "printer" && isPrinter;
+        if (a is null) return true;
+
+        switch (os)
         {
             case "windows" when !isWindows: return false;
             case "linux" when !isLinux: return false;
+            case "printer": return false;
         }
 
         if (a.InstallationType is { } wanted && !wanted.Equals("any", StringComparison.OrdinalIgnoreCase))

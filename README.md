@@ -46,7 +46,31 @@ in a sortable, filterable grid and export to CSV and JSON.
 - **Inventory (Linux/Unix hosts, over SSH):** OS (distro/version/kernel/arch), hostname, CPU, memory, storage
   (lsblk + df, with SSD/HDD and NVMe/SATA/USB from ROTA/TRAN), network adapters, current/last login, and
   installed packages (dpkg / rpm / apk). Password auth;
-  the runner routes by device type automatically (Windows→WMI, Linux→SSH).
+  the runner routes by device type automatically (Windows→WMI, Linux→SSH, printers and network devices→SNMP/IPP).
+- **Inventory (printers, over SNMP + IPP):** the standard **Printer MIB / Host Resources MIB** every major brand
+  implements (HP, Brother, Canon, Epson, Kyocera, Xerox, Lexmark, Ricoh, Konica Minolta, Sharp…) — make, model,
+  serial (with Entity-MIB and HP/Brother private-OID fallbacks), **status** (idle / printing / sleep / down) and
+  **error flags** (paper jam, door open, out of paper, low/out of toner, service requested…), **supply levels** for
+  every toner / ink / drum / fuser / waste container with percentages where the engine reports them ("some
+  remaining" where it only reports a flag, as Brother does), **page counter**, paper trays with fill level, front-panel
+  text, alerts and covers, firmware, uptime, location/contact, interfaces and MAC. Over **IPP (port 631, no
+  credentials)** it also reads the printer's own **queue** (`queued-job-count` and the pending jobs with user and
+  page count), IPP state/reasons, and supply levels as a fallback when SNMP is off — which is the default on newer
+  HP FutureSmart firmware. Windows print servers are tied in too: each inventoried Windows host now reports the
+  **jobs waiting in each of its print queues**, and the printer's detail shows "Queues on print servers" with those
+  counts (linked by the queue's TCP/IP port address).
+- **Inventory (switches / APs / NAS, over SNMP):** sysName, description, location, contact, uptime, firmware and
+  serial (Entity-MIB), interface table (name, MAC, speed, up/total) — and if the Host Resources MIB says a
+  "network device" is really a printer (e.g. an HP with port 9100 closed), it is re-classified and gets the
+  printer groups.
+
+SNMP is v1/v2c with a read-only **community string**, entered as a credential of kind *Printer / switch (SNMP)*.
+Marco tries `public` by default (every printer ships with it) until you add your own; passwords of Windows/Linux
+credentials are never sent as communities. A wrong community gets no reply at all — that is how SNMP works — so
+the prerequisite doctor distinguishes "UDP 161 refused" (SNMP switched off on the device) from silence (wrong
+community or firewall) and tells you where in the device's web admin to enable it. No dependencies: the SNMP and
+IPP clients are hand-written over `UdpClient` / `HttpClient`. Not yet: SNMPv3, IPP over HTTPS, Brother/Epson
+private-MIB exact levels.
 
 Each collector can be switched on or off in the left panel ("Inventory collectors"); the choice persists and is
 recorded in the run log. Heavier or audit-oriented collectors (scheduled tasks, USB history) default off. Sources
@@ -61,23 +85,28 @@ Marco keeps and reasons about scans, not just runs them:
 - **Scan history & compare** — every completed run is auto-saved (gzipped) to the `scans\` folder and listed in
   the left panel. **Compare…** diffs the current grid against an earlier run by serial/MAC (so DHCP churn reads as
   an address change, not a new machine), flagging software added/removed, security posture regressions, new local
-  admins, and hardware swaps.
-- **Compliance & fleet health** — ~22 opinionated rules over the collected posture (BitLocker, SMB1, firewall,
-  RDP+NLA, Secure Boot, TPM 2.0, LAPS, patch age, OS end-of-support…) give a per-host score and a fleet rollup.
-  Null inputs read *unknown*, never *fail*. Extend or retune with your own JSON packs in `Marco.Data\compliance\`.
+  admins, hardware swaps, and — for printers — supplies crossing into low/empty (or replaced) and jams/doors/down
+  appearing or clearing; a toner level drifting a few percent is deliberately not a change.
+- **Compliance & fleet health** — ~24 opinionated rules over the collected posture (BitLocker, SMB1, firewall,
+  RDP+NLA, Secure Boot, TPM 2.0, LAPS, patch age, OS end-of-support, printer supplies above threshold, printer free
+  of blocking errors…) give a per-host score and a fleet rollup. Computer rules are *not applicable* to printers
+  and vice versa. Null inputs read *unknown*, never *fail*. Extend or retune with your own JSON packs in
+  `Marco.Data\compliance\`.
 - **Lifecycle / EOL** — a bundled table flags operating systems past or nearing end of support, plus approximate
   hardware age from the BIOS date (refresh with `build\refresh-eol.ps1`).
 - **Known-device baseline** — bless a scan as the set of known devices; later scans flag anything new (a rogue
   Raspberry Pi jumps out), with a *NEW?* state for Wi-Fi MAC randomization that inventory resolves.
 - **Prerequisite doctor** — when inventory fails, a per-host "why" with a copy-paste fix, and a fleet rollup
-  grouping hosts by cause (firewall, token filtering, Remote Registry, SSH…). Emits text only, never runs it.
+  grouping hosts by cause (firewall, token filtering, Remote Registry, SSH, SNMP switched off / no SNMP response…).
+  Emits text only, never runs it.
 - **Client profiles** — bundle an engagement's targets, scoped credentials, and report branding; sharable as a
   `.marcoclient.json` that never carries credentials.
 - **Per-host actions & Wake-on-LAN** — right-click for RDP/SSH/web-admin/C$/ping (only where the evidence fits),
   and wake asleep hosts by MAC before a scan.
 - **Branded assessment report** — one-click client-ready HTML (executive summary, compliance donut, prioritized
-  findings, asset appendix plus a hardware table with RAM type/max, disk types and the expansion estimate);
-  medium-severity upgrade advisories flag mechanical internal drives and RAM with no headroom; print to PDF.
+  findings, asset appendix plus a hardware table with RAM type/max, disk types and the expansion estimate, and a
+  printers table with supplies, pages and queue depth); medium-severity advisories flag mechanical internal
+  drives, RAM with no headroom and low consumables; empty supplies, jams and down printers are high; print to PDF.
 - **Headless CLI** — `Marco.exe scan …` for Task Scheduler (see *Scheduled / headless scans* below).
 
 The itemization tool (cross-machine query), SQLite export, and AD browse remain planned for later phases.
@@ -140,11 +169,17 @@ runtime extraction) instead of the single self-extracting exe.
    block** for a flat list. **Pause** parks new hosts (hosts already mid-probe finish — the status shows how many
    are still "in flight"); **Cancel** stops within about a second and the status reads "Cancelling…" until the last
    in-flight probes have drained. Both also work during inventory.
-3. **Credentials** — add one or more credential sets (left panel). They are tried in order per host; the first
-   that authenticates is remembered for that host. With none configured, Marco uses your current session token.
-4. **Inventory** — select a host and **Inventory selected**, or **Inventory alive** for all live Windows hosts.
-   The detail pane shows the full inventory; per-collector status is listed at the bottom.
-5. **Export** — **Export CSV** (a `machines.csv` plus keyed `software.csv` / `disks.csv` / `adapters.csv`) or
+3. **Credentials** — add one or more credential sets (left panel): Windows (WMI), Linux (SSH) or an SNMP community
+   string for printers and network devices. They are tried in order per host; the first that authenticates is
+   remembered for that host. With none configured, Marco uses your current session token for Windows hosts and
+   the `public` community for printers / network devices. **Test on host** probes a printer over SNMP live.
+4. **Inventory** — select a host and **Inventory selected**, or **Inventory alive** for every live host (Windows,
+   Linux, printers and network devices each go to their own runner). The detail pane shows the full inventory —
+   for a printer: status, supply bars, pages, the printer's queue and jobs, queues on print servers, trays, alerts —
+   and the grid's **Printer** column summarises it ("Idle · K 8% · C 80% · 45,210 pages · 5 queued", orange when a
+   supply is low, red when the printer needs a person). Per-collector status is listed at the bottom.
+5. **Export** — **Export CSV** (a `machines.csv` plus keyed `software.csv` / `disks.csv` / `adapters.csv`, and
+   `printer-devices.csv` / `printer-supplies.csv` for printers) or
    **Export JSON** (the full nested structure). Exports respect the current filter and include scan metadata
    (including the app version that produced them). **Open scan…** loads a previously exported JSON scan back
    into the grid.
