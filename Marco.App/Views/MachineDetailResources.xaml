@@ -380,7 +380,7 @@
           <ItemsControl.ItemTemplate>
             <DataTemplate>
               <TextBlock TextTrimming="CharacterEllipsis">
-                <Run Text="Printer: " /><Run Text="{Binding Name, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding PortName, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text=" " /><Run Text="{Binding HostAddress, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="  " /><Run Text="{Binding DriverName, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" />
+                <Run Text="Printer queue: " /><Run Text="{Binding Name, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding PortName, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text=" " /><Run Text="{Binding HostAddress, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="  " /><Run Text="{Binding DriverName, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="  " /><Run Text="{Binding QueuedJobs, Mode=OneWay, StringFormat='{}{0} queued', TargetNullValue=''}" /><Run Text="  " /><Run Text="{Binding PrinterState, Mode=OneWay}" Foreground="Firebrick" />
               </TextBlock>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
@@ -415,6 +415,160 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </Expander>
+
+        <!-- Printer device (SNMP / IPP) -->
+        <StackPanel Visibility="{Binding Printer, Converter={StaticResource NotEmptyToVis}}">
+          <TextBlock Text="Printer" Style="{StaticResource SectionHeader}" Margin="0,10,0,4" />
+          <TextBlock TextWrapping="Wrap">
+            <Run Text="{Binding Printer.Status, Mode=OneWay}" FontWeight="SemiBold" /><Run Text="  device " /><Run Text="{Binding Printer.DeviceStatus, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="  " /><Run Text="{Binding Printer.IppState, Mode=OneWay, StringFormat='IPP: {0}', TargetNullValue=''}" Foreground="{StaticResource MutedBrush}" />
+          </TextBlock>
+          <ItemsControl ItemsSource="{Binding Printer.ErrorStates}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding}" Foreground="Firebrick" FontWeight="SemiBold" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <ItemsControl ItemsSource="{Binding Printer.IppStateReasons}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding}" Foreground="DarkGoldenrod" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <ItemsControl ItemsSource="{Binding Printer.DisplayText}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding StringFormat='Display: {0}'}" Foreground="{StaticResource MutedBrush}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBlock Text="Supplies" FontWeight="SemiBold" Margin="0,6,0,2"
+                     Visibility="{Binding Printer.Supplies, Converter={StaticResource NotEmptyToVis}}" />
+          <ItemsControl ItemsSource="{Binding Printer.Supplies}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Grid Margin="0,1">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="110" />
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="90" />
+                  </Grid.ColumnDefinitions>
+                  <ProgressBar Grid.Column="0" Height="12" Minimum="0" Maximum="100" Value="{Binding Percent, Mode=OneWay, TargetNullValue=0}"
+                               VerticalAlignment="Center" Margin="0,0,8,0">
+                    <ProgressBar.Style>
+                      <Style TargetType="ProgressBar">
+                        <Setter Property="Foreground" Value="#4CAF50" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding IsLow}" Value="True"><Setter Property="Foreground" Value="#E67E22" /></DataTrigger>
+                          <DataTrigger Binding="{Binding IsEmpty}" Value="True"><Setter Property="Foreground" Value="#C0392B" /></DataTrigger>
+                          <DataTrigger Binding="{Binding Percent}" Value="{x:Null}"><Setter Property="Visibility" Value="Hidden" /></DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </ProgressBar.Style>
+                  </ProgressBar>
+                  <TextBlock Grid.Column="1" TextTrimming="CharacterEllipsis">
+                    <Run Text="{Binding Name, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding Type, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text=" " /><Run Text="{Binding Colorant, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" />
+                  </TextBlock>
+                  <TextBlock Grid.Column="2" Text="{Binding LevelDisplay}" HorizontalAlignment="Right">
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding IsLow}" Value="True"><Setter Property="Foreground" Value="#E67E22" /><Setter Property="FontWeight" Value="SemiBold" /></DataTrigger>
+                          <DataTrigger Binding="{Binding IsEmpty}" Value="True"><Setter Property="Foreground" Value="Firebrick" /><Setter Property="FontWeight" Value="SemiBold" /></DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBlock Margin="0,6,0,0" TextWrapping="Wrap"
+                     Visibility="{Binding Printer.TotalPages, Converter={StaticResource NotEmptyToVis}}">
+            <Run Text="Pages: " /><Run Text="{Binding Printer.TotalPages, Mode=OneWay, StringFormat='{}{0:N0}'}" /><Run Text=" " /><Run Text="{Binding Printer.PageCountUnit, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" />
+          </TextBlock>
+          <TextBlock TextWrapping="Wrap" Visibility="{Binding Printer.QueuedJobs, Converter={StaticResource NotEmptyToVis}}">
+            <Run Text="Queued on the printer: " /><Run Text="{Binding Printer.QueuedJobs, Mode=OneWay}" FontWeight="SemiBold" />
+          </TextBlock>
+          <Expander Margin="0,2,0,0" IsExpanded="False"
+                    Visibility="{Binding Printer.Jobs, Converter={StaticResource NotEmptyToVis}}">
+            <Expander.Header>
+              <TextBlock Text="{Binding Printer.Jobs.Count, StringFormat='Jobs on the printer ({0})'}" />
+            </Expander.Header>
+            <ItemsControl ItemsSource="{Binding Printer.Jobs}" Margin="18,2,0,0">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock TextTrimming="CharacterEllipsis">
+                    <Run Text="{Binding Id, Mode=OneWay, StringFormat='#{0}'}" Foreground="{StaticResource MutedBrush}" /><Run Text="  " /><Run Text="{Binding Name, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding User, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="  " /><Run Text="{Binding State, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="  " /><Run Text="{Binding Impressions, Mode=OneWay, StringFormat='{}{0} pages', TargetNullValue=''}" Foreground="{StaticResource MutedBrush}" />
+                  </TextBlock>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Expander>
+          <TextBlock Text="Queues on print servers" FontWeight="SemiBold" Margin="0,6,0,2"
+                     Visibility="{Binding PrintServerQueues, Converter={StaticResource NotEmptyToVis}}" />
+          <ItemsControl ItemsSource="{Binding PrintServerQueues}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Display}" TextTrimming="CharacterEllipsis" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBlock Text="Trays" FontWeight="SemiBold" Margin="0,6,0,2"
+                     Visibility="{Binding Printer.Trays, Converter={StaticResource NotEmptyToVis}}" />
+          <ItemsControl ItemsSource="{Binding Printer.Trays}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <TextBlock TextTrimming="CharacterEllipsis">
+                  <Run Text="{Binding Name, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding Media, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="  " /><Run Text="{Binding Status, Mode=OneWay}" /><Run Text=" " /><Run Text="{Binding Percent, Mode=OneWay, StringFormat='{}{0} %', TargetNullValue=''}" Foreground="{StaticResource MutedBrush}" />
+                </TextBlock>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Expander Margin="0,2,0,0" IsExpanded="False"
+                    Visibility="{Binding Printer.Alerts, Converter={StaticResource NotEmptyToVis}}">
+            <Expander.Header>
+              <TextBlock Text="{Binding Printer.Alerts.Count, StringFormat='Alerts ({0})'}" />
+            </Expander.Header>
+            <ItemsControl ItemsSource="{Binding Printer.Alerts}" Margin="18,2,0,0">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock TextWrapping="Wrap">
+                    <Run Text="{Binding Severity, Mode=OneWay}" FontWeight="SemiBold" /><Run Text="  " /><Run Text="{Binding Description, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding Group, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text=" " /><Run Text="{Binding Code, Mode=OneWay, StringFormat='code {0}', TargetNullValue=''}" Foreground="{StaticResource MutedBrush}" />
+                  </TextBlock>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Expander>
+          <ItemsControl ItemsSource="{Binding Printer.Covers}" Margin="0,2,0,0">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding}" Foreground="{StaticResource MutedBrush}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock TextWrapping="Wrap" Margin="0,4,0,0" Foreground="{StaticResource MutedBrush}">
+            <Run Text="{Binding Printer.SysName, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding Printer.Location, Mode=OneWay}" /><Run Text="  " /><Run Text="{Binding Printer.Contact, Mode=OneWay}" /><Run Text="  firmware " /><Run Text="{Binding Printer.Firmware, Mode=OneWay}" /><Run Text="  up " /><Run Text="{Binding Printer.UptimeDisplay, Mode=OneWay}" />
+          </TextBlock>
+          <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Text="{Binding Printer.Description}" />
+        </StackPanel>
+
+        <!-- Network device (SNMP) -->
+        <StackPanel Visibility="{Binding NetworkDevice, Converter={StaticResource NotEmptyToVis}}">
+          <TextBlock Text="Network device" Style="{StaticResource SectionHeader}" Margin="0,10,0,4" />
+          <TextBlock TextWrapping="Wrap" Text="{Binding NetworkDevice.Description}" />
+          <TextBlock TextWrapping="Wrap">
+            <Run Text="{Binding NetworkDevice.SysName, Mode=OneWay}" FontWeight="SemiBold" /><Run Text="  " /><Run Text="{Binding NetworkDevice.Location, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="  " /><Run Text="{Binding NetworkDevice.Contact, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" />
+          </TextBlock>
+          <TextBlock TextWrapping="Wrap">
+            <Run Text="{Binding NetworkDevice.InterfacesDisplay, Mode=OneWay}" /><Run Text="  firmware " /><Run Text="{Binding NetworkDevice.Firmware, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" /><Run Text="  up " /><Run Text="{Binding NetworkDevice.UptimeDisplay, Mode=OneWay}" Foreground="{StaticResource MutedBrush}" />
+          </TextBlock>
+          <TextBlock Text="{Binding NetworkDevice.ObjectId, StringFormat='sysObjectID {0}', TargetNullValue=''}" Foreground="{StaticResource MutedBrush}" />
+        </StackPanel>
 
         <!-- Software -->
         <Expander Margin="0,10,0,0" IsExpanded="False"

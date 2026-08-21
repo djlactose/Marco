@@ -15,14 +15,21 @@ public sealed class HeadlessScanSession
     private readonly ScanController _controller;
     private readonly IInventoryRunner _windows;
     private readonly IInventoryRunner _linux;
+    private readonly IInventoryRunner? _snmp;
     private readonly Action<string>? _log;
 
     public HeadlessScanSession(ScanController controller, IInventoryRunner windows, IInventoryRunner linux,
         Action<string>? log = null)
+        : this(controller, windows, linux, null, log) { }
+
+    /// <param name="snmp">Runner for printers and network devices; when null those hosts are skipped as before.</param>
+    public HeadlessScanSession(ScanController controller, IInventoryRunner windows, IInventoryRunner linux,
+        IInventoryRunner? snmp, Action<string>? log = null)
     {
         _controller = controller;
         _windows = windows;
         _linux = linux;
+        _snmp = snmp;
         _log = log;
     }
 
@@ -70,22 +77,23 @@ public sealed class HeadlessScanSession
             await Parallel.ForEachAsync(alives, options, async (m, token) =>
             {
                 bool isLinux = m.DeviceType == DeviceType.UnixLinux;
-                if (m.DeviceType is DeviceType.Printer or DeviceType.NetworkDevice)
+                bool isSnmp = m.DeviceType is DeviceType.Printer or DeviceType.NetworkDevice;
+                if (isSnmp && _snmp is null)
                 {
                     m.StatusDetail = "Skipped: printers/network devices aren't inventoried.";
                     Interlocked.Increment(ref skipped);
                 }
                 else
                 {
-                    var hostKind = isLinux ? CredentialKind.Linux : CredentialKind.Windows;
+                    var hostKind = isSnmp ? CredentialKind.Snmp : isLinux ? CredentialKind.Linux : CredentialKind.Windows;
                     var applicable = candidates.Where(c => c.AppliesTo(hostKind)).ToList();
-                    if (applicable.Count == 0)
+                    if (applicable.Count == 0 && !isSnmp) // printers still get the credential-free IPP pass
                     {
                         m.StatusDetail = isLinux ? "No Linux/SSH credentials." : "No Windows credentials.";
                     }
                     else
                     {
-                        var runner = isLinux ? _linux : _windows;
+                        var runner = isSnmp ? _snmp! : isLinux ? _linux : _windows;
                         var outcome = await runner.InventoryAsync(m, applicable, null, enabledCollectors, token).ConfigureAwait(false);
                         if (outcome.Authenticated) Interlocked.Increment(ref authenticated);
                     }
@@ -95,6 +103,7 @@ public sealed class HeadlessScanSession
             }).ConfigureAwait(false);
             _log?.Invoke($"Inventory done: {authenticated}/{alives.Count} authenticated"
                 + (skipped > 0 ? $", {skipped} skipped." : "."));
+            Marco.Core.Printing.PrintServerQueueLinker.Link(machines);
         }
 
         return new Result(machines, alive, unreachable, authenticated, skipped);

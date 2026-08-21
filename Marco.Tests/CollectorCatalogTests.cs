@@ -30,6 +30,22 @@ public class CollectorCatalogTests
     }
 
     [Fact]
+    public void EveryPrinterAndNetworkGroup_IsInTheCatalogue()
+    {
+        var names = CollectorCatalog.All.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var group in Marco.Inventory.Snmp.SnmpDeviceInventoryRunner.PrinterCollectorNames)
+            Assert.Contains(group, names);
+        foreach (var group in Marco.Inventory.Snmp.SnmpDeviceInventoryRunner.NetworkCollectorNames)
+            Assert.Contains(group, names);
+        foreach (var entry in CollectorCatalog.All.Where(c => c.Printer))
+            Assert.Contains(entry.Name, Marco.Inventory.Snmp.SnmpDeviceInventoryRunner.PrinterCollectorNames);
+        foreach (var entry in CollectorCatalog.All.Where(c => c.NetworkDevice))
+            Assert.Contains(entry.Name, Marco.Inventory.Snmp.SnmpDeviceInventoryRunner.NetworkCollectorNames);
+        // Every catalogue entry belongs to at least one platform.
+        Assert.All(CollectorCatalog.All, c => Assert.True(c.Windows || c.Linux || c.Printer || c.NetworkDevice, c.Name));
+    }
+
+    [Fact]
     public void HeavyCollectors_DefaultOff()
     {
         var defaults = CollectorCatalog.DefaultEnabledNames();

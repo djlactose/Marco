@@ -164,6 +164,31 @@ public static class RuleCheckCatalog
             Marco.Core.Lifecycle.OsSupportStatus.Supported => (RuleStatus.Pass, null),
             _ => (RuleStatus.Unknown, null),
         },
+
+        // --- printers (SNMP / IPP) ---
+
+        ["printer-supplies-not-low"] = (m, p) =>
+        {
+            int min = Get(p, "minPercent", PrinterSupply.LowThresholdPercent);
+            if (m.Printer is not { } pr || pr.Supplies.Count == 0) return (RuleStatus.Unknown, null);
+            var graded = pr.Supplies.Where(s => s.Percent is not null || s.DeviceFlagsLow || s.DeviceFlagsEmpty).ToList();
+            if (graded.Count == 0) return (RuleStatus.Unknown, "device reports no numeric levels");
+            var low = graded.Where(s => s.IsEmpty || s.DeviceFlagsLow
+                || (!s.IsReceptacle && s.Percent is { } pct && pct <= min)
+                || (s.IsReceptacle && s.Percent is { } fill && fill >= 100 - min)).ToList();
+            return low.Count == 0 ? (RuleStatus.Pass, null)
+                : (RuleStatus.Fail, string.Join("; ", low.Select(s => $"{s.Name}: {s.LevelDisplay}")));
+        },
+
+        ["printer-no-error-state"] = (m, _) =>
+        {
+            if (m.Printer is not { } pr) return (RuleStatus.Unknown, null);
+            if (pr.Status is null && pr.DeviceStatus is null && pr.IppState is null) return (RuleStatus.Unknown, null);
+            var problems = pr.ErrorStates.Where(PrinterErrorStates.IsBlocking).ToList();
+            if (string.Equals(pr.DeviceStatus, "Down", StringComparison.OrdinalIgnoreCase)) problems.Add("device down");
+            if (string.Equals(pr.IppState, "stopped", StringComparison.OrdinalIgnoreCase)) problems.Add("IPP state stopped");
+            return problems.Count == 0 ? (RuleStatus.Pass, null) : (RuleStatus.Fail, string.Join("; ", problems));
+        },
     };
 
     private static (RuleStatus, string?) Bool(bool? value, bool passWhen, string failDetail) => value switch

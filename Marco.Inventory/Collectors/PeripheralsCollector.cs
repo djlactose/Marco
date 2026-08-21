@@ -102,11 +102,28 @@ public sealed class PeripheralsCollector : IInventoryCollector
         await steps.RunAsync("Printers", async () =>
         {
             var rows = await wmi.QueryAsync(WmiQueryHelpers.CimV2,
-                "SELECT Name, Default, PortName, DriverName, Shared, ShareName, Network, Location, PrinterStatus, WorkOffline FROM Win32_Printer", ct);
+                "SELECT Name, Default, PortName, DriverName, Shared, ShareName, Network, Location, PrinterStatus, PrinterState, WorkOffline FROM Win32_Printer", ct);
             var ports = await wmi.QueryOptionalAsync("SELECT Name, HostAddress FROM Win32_TCPIPPrinterPort", ct);
             var hostByPort = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var p in ports)
                 if (p.GetString("Name") is { } pn && p.GetString("HostAddress") is { } ha) hostByPort[pn] = ha;
+
+            // Queue depth: Win32_PrintJob.Name is "<printer>, <job id>"; count per printer. Optional because the
+            // class needs the spooler running and is occasionally slow on busy print servers.
+            Dictionary<string, int>? jobsByPrinter = null;
+            try
+            {
+                var jobs = await wmi.QueryAsync(WmiQueryHelpers.CimV2, "SELECT Name FROM Win32_PrintJob", ct);
+                jobsByPrinter = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                foreach (var j in jobs)
+                {
+                    var printer = PrinterNameFromJob(j.GetString("Name"));
+                    if (printer is null) continue;
+                    jobsByPrinter[printer] = jobsByPrinter.TryGetValue(printer, out var n) ? n + 1 : 1;
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (WmiException) { /* spooler stopped or class unavailable: queue depth stays unknown */ }
 
             var printers = new List<PrinterEntry>();
             foreach (var r in rows)
@@ -126,6 +143,8 @@ public sealed class PeripheralsCollector : IInventoryCollector
                     Location = r.GetString("Location"),
                     HostAddress = port is not null && hostByPort.TryGetValue(port, out var host) ? host : null,
                     Status = r.GetBool("WorkOffline") == true ? "Offline" : DescribePrinterStatus(r.GetInt("PrinterStatus")),
+                    PrinterState = DescribePrinterState(r.GetInt("PrinterState")),
+                    QueuedJobs = jobsByPrinter is null ? null : jobsByPrinter.TryGetValue(name, out var q) ? q : 0,
                 });
             }
             machine.Printers = printers.OrderBy(p => !p.IsDefault).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
@@ -279,6 +298,33 @@ public sealed class PeripheralsCollector : IInventoryCollector
         1 => "Other", 2 => "Unknown", 3 => "Idle", 4 => "Printing", 5 => "Warming up",
         6 => "Stopped printing", 7 => "Offline", _ => null,
     };
+
+    /// <summary>Win32_Printer.PrinterState flag bits (the spooler's PRINTER_STATUS_* values) as a readable list;
+    /// null when zero/unknown.</summary>
+    public static string? DescribePrinterState(int? state)
+    {
+        if (state is not { } s || s == 0) return null;
+        var names = new List<string>();
+        void F(int bit, string name) { if ((s & bit) != 0) names.Add(name); }
+        F(0x1, "Paused"); F(0x2, "Error"); F(0x4, "Pending deletion"); F(0x8, "Paper jam"); F(0x10, "Paper out");
+        F(0x20, "Manual feed"); F(0x40, "Paper problem"); F(0x80, "Offline"); F(0x100, "I/O active"); F(0x200, "Busy");
+        F(0x400, "Printing"); F(0x800, "Output bin full"); F(0x1000, "Not available"); F(0x2000, "Waiting");
+        F(0x4000, "Processing"); F(0x8000, "Initializing"); F(0x10000, "Warming up"); F(0x20000, "Toner low");
+        F(0x40000, "No toner"); F(0x80000, "Page punt"); F(0x100000, "User intervention"); F(0x200000, "Out of memory");
+        F(0x400000, "Door open"); F(0x800000, "Server unknown"); F(0x1000000, "Power save");
+        return names.Count == 0 ? null : string.Join(", ", names);
+    }
+
+    /// <summary>Win32_PrintJob.Name is "&lt;printer name&gt;, &lt;job id&gt;"; the printer name may itself contain commas,
+    /// so split on the last one.</summary>
+    public static string? PrinterNameFromJob(string? jobName)
+    {
+        if (string.IsNullOrWhiteSpace(jobName)) return null;
+        int comma = jobName.LastIndexOf(',');
+        if (comma <= 0) return jobName.Trim();
+        var tail = jobName[(comma + 1)..].Trim();
+        return tail.All(char.IsDigit) ? jobName[..comma].Trim() : jobName.Trim();
+    }
 
     private static readonly string[] BuiltInVirtualPrinters =
     {

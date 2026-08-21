@@ -31,4 +31,12 @@ public static class PrereqFixes
         "# and allow SMB (TCP 445) through its firewall if it is blocked:\r\n" +
         "Set-Service RemoteRegistry -StartupType Automatic; Start-Service RemoteRegistry\r\n" +
         "netsh advfirewall firewall set rule group=\"File and Printer Sharing\" new enable=yes";
+
+    /// <summary>Printers and network gear have no script to run — the fix is a checklist on the device itself.</summary>
+    public const string SnmpEnable =
+        "# Printers / network devices are read over SNMP v1/v2c (read-only). On the DEVICE's web admin page:\r\n" +
+        "#   1. Network (or Networking / Management) > SNMP: enable SNMP v1/v2c, read-only.\r\n" +
+        "#   2. Note the Get/read community (default 'public'); if it differs, add it in Marco as an SNMP credential.\r\n" +
+        "#   3. Allow UDP 161 from this machine to the device (and TCP 631 for IPP on printers) through any firewall/ACL.\r\n" +
+        "# Test from here:  Marco > Credentials > Add > Printer / network device (SNMP) > Test on host.";
 }

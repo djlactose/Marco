@@ -25,6 +25,7 @@ public partial class MainViewModel : ObservableObject
     private readonly CredentialStore _credentials = new();
     private readonly InventoryRunner _inventory = InventoryFactory.CreateRunner();
     private readonly Marco.Inventory.Linux.LinuxInventoryRunner _linuxInventory = InventoryFactory.CreateLinuxRunner();
+    private readonly Marco.Inventory.Snmp.SnmpDeviceInventoryRunner _snmpInventory = InventoryFactory.CreateSnmpRunner();
     private readonly RunLog _runLog;
 
     private readonly ConcurrentQueue<Machine> _pending = new();
@@ -288,6 +289,8 @@ public partial class MainViewModel : ObservableObject
             || Contains(m.DeviceType.ToString(), f)
             || Contains(m.Status.ToString(), f)
             || Contains(m.System.Manufacturer, f)
+            || Contains(m.System.Model, f)
+            || Contains(m.PrinterSummary, f) // "Low toner", "Paper jam", "queued"
             || Contains(m.Os.Caption, f)
             || m.MacAddresses.Any(mac => Contains(mac, f));
 

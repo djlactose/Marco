@@ -41,6 +41,7 @@ public partial class CredentialDialog : Window
 
         if (editing is not null) LoadFrom(editing);
         else if (defaultKind == CredentialKind.Linux) LinuxModeRadio.IsChecked = true;
+        else if (defaultKind == CredentialKind.Snmp) SnmpModeRadio.IsChecked = true;
         ApplyMode();
         Loaded += (_, _) => LabelBox.Focus();
     }
@@ -54,14 +55,29 @@ public partial class CredentialDialog : Window
         Title = "Edit credential";
         OkButton.Content = "Save";
         if (set.Kind == CredentialKind.Linux) LinuxModeRadio.IsChecked = true;
+        else if (set.Kind == CredentialKind.Snmp) SnmpModeRadio.IsChecked = true;
         LabelBox.Text = set.Label;
         DomainBox.Text = set.Domain ?? "";
         UserBox.Text = set.Username ?? "";
         PortBox.Text = set.SshPort.ToString();
+        SnmpVersionCombo.SelectedIndex = set.SnmpVersion switch
+        {
+            Marco.Core.Snmp.SnmpVersion.V2c => 1,
+            Marco.Core.Snmp.SnmpVersion.V1 => 2,
+            _ => 0,
+        };
         if (set.Password is { Length: > 0 }) PasswordKeepHint.Visibility = Visibility.Visible;
     }
 
     private bool IsLinux => LinuxModeRadio.IsChecked == true;
+    private bool IsSnmp => SnmpModeRadio.IsChecked == true;
+
+    private Marco.Core.Snmp.SnmpVersion? SelectedSnmpVersion => SnmpVersionCombo.SelectedIndex switch
+    {
+        1 => Marco.Core.Snmp.SnmpVersion.V2c,
+        2 => Marco.Core.Snmp.SnmpVersion.V1,
+        _ => null,
+    };
 
     // The text lives in Core so the prerequisite doctor cites the same commands.
     public const string TargetEnablementScript = Marco.Core.Diagnosis.PrereqFixes.TargetEnablement;
@@ -72,11 +88,16 @@ public partial class CredentialDialog : Window
     {
         if (!IsInitialized) return; // Checked fires during XAML parse before all controls exist
         var lin = IsLinux;
-        DomainRow.Visibility = lin ? Visibility.Collapsed : Visibility.Visible;
+        var snmp = IsSnmp;
+        DomainRow.Visibility = lin || snmp ? Visibility.Collapsed : Visibility.Visible;
+        UserRow.Visibility = snmp ? Visibility.Collapsed : Visibility.Visible;
+        PasswordLabel.Text = snmp ? "Community string" : "Password";
+        SnmpVersionRow.Visibility = snmp ? Visibility.Visible : Visibility.Collapsed;
         PortRow.Visibility = lin ? Visibility.Visible : Visibility.Collapsed;
-        WindowsPresets.Visibility = lin ? Visibility.Collapsed : Visibility.Visible;
-        WindowsHelp.Visibility = lin ? Visibility.Collapsed : Visibility.Visible;
+        WindowsPresets.Visibility = lin || snmp ? Visibility.Collapsed : Visibility.Visible;
+        WindowsHelp.Visibility = lin || snmp ? Visibility.Collapsed : Visibility.Visible;
         LinuxHelp.Visibility = lin ? Visibility.Visible : Visibility.Collapsed;
+        SnmpHelp.Visibility = snmp ? Visibility.Visible : Visibility.Collapsed;
         PresetHint.Visibility = Visibility.Collapsed;
         ResultText.Visibility = Visibility.Collapsed;
         _verifiedSignature = null;
@@ -88,6 +109,19 @@ public partial class CredentialDialog : Window
     private CredentialSet BuildSet()
     {
         var user = UserBox.Text.Trim();
+        if (IsSnmp)
+        {
+            var version = SelectedSnmpVersion;
+            var label = string.IsNullOrWhiteSpace(LabelBox.Text)
+                ? "SNMP community" + (version is { } v ? $" ({(v == Marco.Core.Snmp.SnmpVersion.V1 ? "v1" : "v2c")})" : "")
+                : LabelBox.Text.Trim();
+            return new CredentialSet(label, null, null, ResolvePassword())
+            {
+                Kind = CredentialKind.Snmp,
+                SnmpVersion = version,
+                ClientId = SelectedClientId,
+            };
+        }
         if (IsLinux)
         {
             var port = TryGetPort(out var p) ? p : 22;
@@ -130,7 +164,7 @@ public partial class CredentialDialog : Window
     }
 
     private string Signature()
-        => $"{IsLinux}|{DomainBox.Text}|{UserBox.Text}|{TypedPasswordLength()}|{TestHostBox.Text}|{PortBox.Text}";
+        => $"{IsLinux}|{IsSnmp}|{SnmpVersionCombo.SelectedIndex}|{DomainBox.Text}|{UserBox.Text}|{TypedPasswordLength()}|{TestHostBox.Text}|{PortBox.Text}";
 
     /// <summary>Valid port (or default 22 when blank / Windows mode); false when the text is not a usable port.</summary>
     private bool TryGetPort(out int port)
@@ -145,7 +179,8 @@ public partial class CredentialDialog : Window
 
     private async void OnTest(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(UserBox.Text)) { ShowResult(VerifyOutcome.Error, "Enter a username first.", null); return; }
+        if (IsSnmp && TypedPasswordLength() == 0 && _editing?.Password is not { Length: > 0 }) { ShowResult(VerifyOutcome.Error, "Enter a community string first.", null); return; }
+        if (!IsSnmp && string.IsNullOrWhiteSpace(UserBox.Text)) { ShowResult(VerifyOutcome.Error, "Enter a username first.", null); return; }
         if (!TryGetPort(out _)) { ShowResult(VerifyOutcome.Error, "SSH port must be a whole number from 1 to 65535.", null); return; }
         var host = TestHostBox.Text.Trim();
         using var set = BuildSet();
@@ -167,6 +202,12 @@ public partial class CredentialDialog : Window
         if (_verifier is null) return new VerifyResult(VerifyOutcome.Error, "Verification is unavailable.");
         using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(30));
 
+        if (IsSnmp)
+        {
+            if (string.IsNullOrWhiteSpace(host)) return new VerifyResult(VerifyOutcome.Error, "Enter a printer or device address to test SNMP against.");
+            return await _verifier.VerifySnmpHostAsync(set, host, cts.Token);
+        }
+
         if (IsLinux)
         {
             if (string.IsNullOrWhiteSpace(host)) return new VerifyResult(VerifyOutcome.Error, "Enter a host to test SSH against.");
@@ -186,7 +227,16 @@ public partial class CredentialDialog : Window
 
     private async void OnOk(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(UserBox.Text))
+        if (IsSnmp)
+        {
+            if (TypedPasswordLength() == 0 && _editing?.Password is not { Length: > 0 })
+            {
+                ShowResult(VerifyOutcome.Error, "A community string is required.", null);
+                PasswordBoxCtrl.Focus();
+                return;
+            }
+        }
+        else if (string.IsNullOrWhiteSpace(UserBox.Text))
         {
             ShowResult(VerifyOutcome.Error, "A username is required.", null);
             UserBox.Focus();

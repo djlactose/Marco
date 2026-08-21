@@ -7,7 +7,7 @@ namespace Marco.Export.Diff;
 /// stable as the network it came from.</summary>
 public enum MatchKind { Serial, Mac, WeakMac, AddressName }
 
-public enum DiffCategory { Identity, Os, Hardware, Storage, Network, Software, Hotfixes, Security, Accounts, Services, Peripherals }
+public enum DiffCategory { Identity, Os, Hardware, Storage, Network, Software, Hotfixes, Security, Accounts, Services, Peripherals, Printer }
 
 public enum DiffChangeKind { Added, Removed, Changed }
 

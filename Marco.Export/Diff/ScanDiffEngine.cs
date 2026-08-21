@@ -53,8 +53,42 @@ public static class ScanDiffEngine
         if (BothOk(o, n, "Services")) CompareServices(o, n, list);
         if (BothOk(o, n, "ScheduledTasks")) CompareScheduledTasks(o, n, list);
         if (BothOk(o, n, "Peripherals")) ComparePeripherals(o, n, list);
+        if (BothOk(o, n, "Supplies") || BothOk(o, n, "PrinterStatus")) ComparePrinter(o, n, list);
 
         return list;
+    }
+
+    /// <summary>Printer devices: only threshold crossings and status transitions — a toner level creeping from
+    /// 41 % to 38 % is not a change worth a row, crossing into "low" or "empty" is, and recovering (a replaced
+    /// cartridge) is worth an Info line. Page counters are transient and never compared.</summary>
+    private static void ComparePrinter(MachineDto o, MachineDto n, List<FieldChange> list)
+    {
+        if (o.Printer is not { } op || n.Printer is not { } np) return;
+
+        static string Grade(Marco.Core.Model.PrinterSupply s) => s.IsEmpty ? "empty" : s.IsLow ? "low" : "ok";
+        Keyed(list, DiffCategory.Printer, "Supply", op.Supplies, np.Supplies,
+            s => $"{s.Type}|{s.Colorant}|{s.Name}", s => $"{s.Name} ({s.LevelDisplay})", DiffSeverity.Info,
+            compareMatched: (a, b) =>
+            {
+                var inner = new List<FieldChange>();
+                var ga = Grade(a); var gb = Grade(b);
+                if (ga == gb) return inner;
+                bool worse = gb == "empty" || (gb == "low" && ga == "ok");
+                inner.Add(new FieldChange(DiffCategory.Printer, $"Supply: {b.Name}", DiffChangeKind.Changed,
+                    a.LevelDisplay, b.LevelDisplay, worse ? DiffSeverity.Regression : DiffSeverity.Info));
+                return inner;
+            });
+
+        // Status: only the flip between "printing normally" and "needs a person" (jam, door, out of toner, down).
+        if (op.HasErrorCondition != np.HasErrorCondition)
+        {
+            static string Describe(Marco.Core.Model.PrinterDevice p) => string.Join(", ",
+                new[] { p.Status }.Concat(p.ErrorStates)
+                    .Concat(string.Equals(p.DeviceStatus, "Down", StringComparison.OrdinalIgnoreCase) ? new[] { "Down" } : Array.Empty<string>())
+                    .Where(s => !string.IsNullOrWhiteSpace(s)));
+            Add(list, DiffCategory.Printer, "Printer status", Describe(op), Describe(np),
+                np.HasErrorCondition ? DiffSeverity.Regression : DiffSeverity.Info);
+        }
     }
 
     private static bool BothOk(MachineDto o, MachineDto n, string collector)

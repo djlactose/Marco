@@ -16,6 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Marco.Core\Marco.Core.csproj" />
     <ProjectReference Include="..\Marco.Discovery\Marco.Discovery.csproj" />
     <ProjectReference Include="..\Marco.Inventory\Marco.Inventory.csproj" />

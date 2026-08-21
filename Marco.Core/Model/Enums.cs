@@ -57,6 +57,10 @@ public enum ConnectFailure
     Timeout,
     SshAuthFailed,
     SshUnreachable,
+    /// <summary>The printer/network device answered neither SNMP (any configured community) nor IPP.</summary>
+    SnmpNoResponse,
+    /// <summary>The host replied ICMP port-unreachable on UDP 161 — SNMP is switched off on the device.</summary>
+    SnmpDisabled,
 }
 
 /// <summary>How a host relates to the blessed known-device baseline (see Marco.Core.Baseline). Transient —

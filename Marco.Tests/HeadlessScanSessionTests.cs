@@ -81,6 +81,51 @@ public class HeadlessScanSessionTests
     }
 
     [Fact]
+    public async Task Printer_GoesToSnmpRunner_WithOnlySnmpCredentials()
+    {
+        var liveness = new FakeLivenessProbe();
+        liveness.Alive.Add("10.0.0.9");
+        liveness.OpenPorts["10.0.0.9"] = new[] { 9100 }; // JetDirect → classified Printer
+        var windows = new RecordingRunner();
+        var linux = new RecordingRunner();
+        var snmp = new RecordingRunner();
+        var session = new HeadlessScanSession(Controller(liveness), windows, linux, snmp);
+
+        var creds = Creds(("win", CredentialKind.Windows), ("any", CredentialKind.Any), ("community", CredentialKind.Snmp));
+        var result = await session.RunAsync(Targets("10.0.0.9"),
+            new ScanSettings { DiscoveryConcurrency = 4, InventoryConcurrency = 2, ClassificationEnabled = true },
+            creds, null, inventory: true, includeUnreachable: false, default);
+
+        Assert.Equal("10.0.0.9", Assert.Single(snmp.Seen));
+        Assert.Empty(windows.Seen);
+        Assert.Empty(linux.Seen);
+        Assert.Equal(1, result.Authenticated);
+        Assert.Equal(0, result.Skipped);
+        // AppliesTo: neither the Windows nor the "Any" password may be tried as a community string.
+        Assert.False(creds[0].AppliesTo(CredentialKind.Snmp));
+        Assert.False(creds[1].AppliesTo(CredentialKind.Snmp));
+        Assert.True(creds[2].AppliesTo(CredentialKind.Snmp));
+        Assert.False(creds[2].AppliesTo(CredentialKind.Windows));
+    }
+
+    [Fact]
+    public async Task Printer_WithoutSnmpRunner_IsSkippedAsBefore()
+    {
+        var liveness = new FakeLivenessProbe();
+        liveness.Alive.Add("10.0.0.9");
+        liveness.OpenPorts["10.0.0.9"] = new[] { 9100 };
+        var windows = new RecordingRunner();
+        var session = new HeadlessScanSession(Controller(liveness), windows, new RecordingRunner());
+
+        var result = await session.RunAsync(Targets("10.0.0.9"),
+            new ScanSettings { DiscoveryConcurrency = 4, InventoryConcurrency = 2, ClassificationEnabled = true },
+            Creds(("win", CredentialKind.Windows)), null, inventory: true, includeUnreachable: false, default);
+
+        Assert.Empty(windows.Seen);
+        Assert.Equal(1, result.Skipped);
+    }
+
+    [Fact]
     public async Task NoInventory_RunsDiscoveryOnly()
     {
         var liveness = new FakeLivenessProbe();

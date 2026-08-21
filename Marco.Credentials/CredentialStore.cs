@@ -90,7 +90,7 @@ public sealed class CredentialStore : IDisposable
 
     private sealed record PersistedEntry(string Label, string? Domain, string? Username, bool IsCurrentToken,
         string? ProtectedPassword, Marco.Core.Inventory.CredentialKind Kind = Marco.Core.Inventory.CredentialKind.Any, int SshPort = 22,
-        string? ClientId = null);
+        string? ClientId = null, Marco.Core.Snmp.SnmpVersion? SnmpVersion = null);
 
     /// <summary>Persist to a DPAPI-protected file scoped to the current user. Passwords are individually
     /// encrypted; nothing plaintext is written.</summary>
@@ -112,7 +112,7 @@ public sealed class CredentialStore : IDisposable
                     }
                     finally { Array.Clear(plain, 0, plain.Length); }
                 }
-                return new PersistedEntry(s.Label, s.Domain, s.Username, s.IsCurrentToken, protectedPwd, s.Kind, s.SshPort, s.ClientId);
+                return new PersistedEntry(s.Label, s.Domain, s.Username, s.IsCurrentToken, protectedPwd, s.Kind, s.SshPort, s.ClientId, s.SnmpVersion);
             }).ToList();
         }
 
@@ -141,7 +141,7 @@ public sealed class CredentialStore : IDisposable
                 loaded.Add(CredentialSet.CurrentToken(e.Label));
                 continue;
             }
-            var set = new CredentialSet(e.Label, e.Domain, e.Username, null) { Kind = e.Kind, SshPort = e.SshPort, ClientId = e.ClientId };
+            var set = new CredentialSet(e.Label, e.Domain, e.Username, null) { Kind = e.Kind, SshPort = e.SshPort, ClientId = e.ClientId, SnmpVersion = e.SnmpVersion };
             if (e.ProtectedPassword is not null)
             {
                 try

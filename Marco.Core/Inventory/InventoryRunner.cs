@@ -3,18 +3,24 @@ using Marco.Core.Wmi;
 
 namespace Marco.Core.Inventory;
 
-/// <summary>Which host kind a credential is meant for. <see cref="Any"/> is tried on both; the others are tried
-/// only on the matching host type, so a Windows domain credential is never fired at an SSH server (and vice
-/// versa), avoiding pointless auth attempts and account lockouts.</summary>
-public enum CredentialKind { Any, Windows, Linux }
+/// <summary>Which host kind a credential is meant for. <see cref="Any"/> is tried on both Windows and Linux; the
+/// others are tried only on the matching host type, so a Windows domain credential is never fired at an SSH server
+/// (and vice versa), avoiding pointless auth attempts and account lockouts. <see cref="Snmp"/> (a community
+/// string for printers and network gear) is never implied by Any: a password must not be sent as a community.</summary>
+public enum CredentialKind { Any, Windows, Linux, Snmp }
 
 /// <summary>One credential candidate to try for a host, carrying its display label for attribution, the host
-/// kind it targets, and (for SSH) the port.</summary>
+/// kind it targets, (for SSH) the port, and (for SNMP) the protocol version to use — null means probe v2c and v1.
+/// For SNMP the community string travels in <see cref="WmiCredential.Password"/>.</summary>
 public sealed record CredentialCandidate(
-    string Label, WmiCredential Credential, CredentialKind Kind = CredentialKind.Any, int SshPort = 22)
+    string Label, WmiCredential Credential, CredentialKind Kind = CredentialKind.Any, int SshPort = 22,
+    Marco.Core.Snmp.SnmpVersion? SnmpVersion = null)
 {
-    /// <summary>True if this credential should be tried against a host of the given kind.</summary>
-    public bool AppliesTo(CredentialKind hostKind) => Kind == CredentialKind.Any || Kind == hostKind;
+    /// <summary>True if this credential should be tried against a host of the given kind. SNMP hosts only accept
+    /// SNMP credentials (Any means Windows-or-Linux).</summary>
+    public bool AppliesTo(CredentialKind hostKind) =>
+        hostKind == CredentialKind.Snmp ? Kind == CredentialKind.Snmp
+        : Kind == CredentialKind.Any || Kind == hostKind;
 }
 
 /// <summary>Result of an inventory pass against a host.</summary>

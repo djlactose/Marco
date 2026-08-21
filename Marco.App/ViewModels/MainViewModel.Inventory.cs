@@ -23,10 +23,18 @@ public sealed class CredentialDisplay
     {
         Set = set;
         Label = set.Label;
-        KindTag = set.Kind switch { CredentialKind.Linux => "SSH", CredentialKind.Windows => "WMI", _ => "" };
-        Details = set.Kind == CredentialKind.Linux
-            ? $"SSH · {set.Username}" + (set.SshPort == 22 ? "" : $" · port {set.SshPort}")
-            : $"WMI · {(string.IsNullOrWhiteSpace(set.Domain) ? set.Username : $"{set.Domain}\\{set.Username}")}";
+        KindTag = set.Kind switch { CredentialKind.Linux => "SSH", CredentialKind.Windows => "WMI", CredentialKind.Snmp => "SNMP", _ => "" };
+        Details = set.Kind switch
+        {
+            CredentialKind.Linux => $"SSH · {set.Username}" + (set.SshPort == 22 ? "" : $" · port {set.SshPort}"),
+            CredentialKind.Snmp => "SNMP community · " + set.SnmpVersion switch
+            {
+                Marco.Core.Snmp.SnmpVersion.V1 => "v1",
+                Marco.Core.Snmp.SnmpVersion.V2c => "v2c",
+                _ => "v2c/v1",
+            } + " · printers & network devices",
+            _ => $"WMI · {(string.IsNullOrWhiteSpace(set.Domain) ? set.Username : $"{set.Domain}\\{set.Username}")}",
+        };
     }
 }
 
@@ -38,7 +46,12 @@ public partial class MainViewModel
     private void AddCredential()
     {
         // Open in the mode matching the selected host, so "select a Linux box → Add credential" lands on SSH.
-        var kind = SelectedMachine?.DeviceType == DeviceType.UnixLinux ? CredentialKind.Linux : CredentialKind.Windows;
+        var kind = SelectedMachine?.DeviceType switch
+        {
+            DeviceType.UnixLinux => CredentialKind.Linux,
+            DeviceType.Printer or DeviceType.NetworkDevice => CredentialKind.Snmp,
+            _ => CredentialKind.Windows,
+        };
         var dialog = new CredentialDialog(InventoryFactory.CreateVerifier(), SelectedMachine?.Address, kind,
             clients: ClientStore.Load(), activeClientId: ActiveClient?.Id)
         {
@@ -170,10 +183,14 @@ public partial class MainViewModel
     private IReadOnlyList<CredentialCandidate> ResolveCandidates()
     {
         // Scoped to the active client: its sets first, then shared ones; other clients' sets never leave home.
-        var candidates = _credentials.ToCandidatesFor(ActiveClient?.Id);
-        return candidates.Count > 0
-            ? candidates
-            : new[] { CredentialSet.CurrentToken().ToCandidate() }; // Windows-kind, so Linux hosts report "no SSH credentials"
+        var candidates = _credentials.ToCandidatesFor(ActiveClient?.Id).ToList();
+        if (candidates.Count == 0)
+            candidates.Add(CredentialSet.CurrentToken().ToCandidate()); // Windows-kind, so Linux hosts report "no SSH credentials"
+        // Printers/network gear: the read-only "public" community every device ships with, unless the operator
+        // configured their own SNMP credential (adding one replaces the default rather than adding to it).
+        if (!candidates.Any(c => c.Kind == CredentialKind.Snmp))
+            candidates.Add(CredentialSet.SnmpDefault().ToCandidate());
+        return candidates;
     }
 
     // --- Inventory ---
@@ -219,7 +236,7 @@ public partial class MainViewModel
         // Gen-gated: after a Stop abandons this run, its late reports must not touch the UI.
         IProgress<ScanProgress> progress = new Progress<ScanProgress>(p => { if (_runGeneration == gen) OnProgress(p); });
 
-        int done = 0, authed = 0, skipped = 0, inFlight = 0;
+        int done = 0, authed = 0, inFlight = 0;
         var sw = System.Diagnostics.Stopwatch.StartNew();
         // Seed the snapshot so a Pause/Stop before the first host reports still composes inventory wording.
         _lastProgress = new ScanProgress(ScanPhase.Inventory, 0, targets.Count, 0, 0, TimeSpan.Zero, null);
@@ -265,35 +282,26 @@ public partial class MainViewModel
                     // Route by device type, and only try credentials meant for that host kind (so a Windows domain
                     // credential is never fired at an SSH server, and vice versa — avoids pointless auth / lockouts).
                     bool isLinux = m.DeviceType == Marco.Core.Model.DeviceType.UnixLinux;
-                    if (!force && m.DeviceType is Marco.Core.Model.DeviceType.Printer or Marco.Core.Model.DeviceType.NetworkDevice)
+                    bool isSnmp = m.DeviceType is Marco.Core.Model.DeviceType.Printer or Marco.Core.Model.DeviceType.NetworkDevice;
+                    var hostKind = isSnmp ? CredentialKind.Snmp : isLinux ? CredentialKind.Linux : CredentialKind.Windows;
+                    var applicable = candidates.Where(c => c.AppliesTo(hostKind)).ToList();
+                    if (applicable.Count == 0 && !isSnmp)
                     {
-                        // No WMI/SSH inventory story for these; leave their discovery status untouched.
-                        m.StatusDetail = m.DeviceType == Marco.Core.Model.DeviceType.Printer
-                            ? "Skipped: printers aren't inventoried. Use 'Inventory selected' to try anyway."
-                            : "Skipped: network devices aren't inventoried. Use 'Inventory selected' to try anyway.";
+                        // Nothing was attempted, so keep the discovery status — red/orange stays reserved
+                        // for real auth failures. (Printers still get the credential-free IPP pass.)
+                        m.StatusDetail = isLinux
+                            ? "Not inventoried: no Linux/SSH credentials configured."
+                            : "Not inventoried: no Windows credentials configured.";
+                        m.ConnectFailure = Marco.Core.Model.ConnectFailure.NoCredentials;
                         outcome = new InventoryOutcome(false, null, m.Status, m.StatusDetail);
-                        Interlocked.Increment(ref skipped);
                     }
                     else
                     {
-                        var hostKind = isLinux ? CredentialKind.Linux : CredentialKind.Windows;
-                        var applicable = candidates.Where(c => c.AppliesTo(hostKind)).ToList();
-                        if (applicable.Count == 0)
-                        {
-                            // Nothing was attempted, so keep the discovery status — red/orange stays reserved
-                            // for real auth failures.
-                            m.StatusDetail = isLinux
-                                ? "Not inventoried: no Linux/SSH credentials configured."
-                                : "Not inventoried: no Windows credentials configured.";
-                            m.ConnectFailure = Marco.Core.Model.ConnectFailure.NoCredentials;
-                            outcome = new InventoryOutcome(false, null, m.Status, m.StatusDetail);
-                        }
-                        else
-                        {
-                            outcome = isLinux
+                        outcome = isSnmp
+                            ? await _snmpInventory.InventoryAsync(m, applicable, null, enabledCollectors, token).ConfigureAwait(false)
+                            : isLinux
                                 ? await _linuxInventory.InventoryAsync(m, applicable, null, enabledCollectors, token).ConfigureAwait(false)
                                 : await _inventory.InventoryAsync(m, applicable, null, enabledCollectors, token).ConfigureAwait(false);
-                        }
                     }
                 }
                 finally
@@ -337,8 +345,8 @@ public partial class MainViewModel
                 throw;
             }
 
-            StatusLine = $"Inventory complete. {authed}/{targets.Count} authenticated in {sw.Elapsed.TotalSeconds:0.0}s."
-                + (skipped > 0 ? $" Skipped {skipped} printer/network device(s)." : "");
+            StatusLine = $"Inventory complete. {authed}/{targets.Count} authenticated in {sw.Elapsed.TotalSeconds:0.0}s.";
+            LinkPrintServerQueues();
             SaveRunToHistory(Marco.Export.History.ScanHistoryPhase.Inventoried);
             ReportDoctorFindings(targets);
             EvaluateBaseline(); // serials just arrived — weak matches can upgrade to Known
@@ -465,9 +473,16 @@ public partial class MainViewModel
         HasDoctorFindings = Marco.Core.Diagnosis.PrereqDoctor.Rollup(Machines).Count > 0;
         StatusLine = $"Loaded scan from {sourceName} ({doc.Metadata.Timestamp:g}).";
         InventoryAliveCommand.NotifyCanExecuteChanged();
+        LinkPrintServerQueues();
         EvaluateBaseline();
         _ = EvaluateComplianceAsync(); // re-graded against the CURRENT packs, not whatever the file carried
     }
+
+    /// <summary>Attach the Windows print queues found on servers to the printers they point at (derived, so it is
+    /// recomputed after every inventory pass and whenever a scan is loaded). UI thread only: it assigns a
+    /// notifying property on rows the grid is bound to.</summary>
+    private void LinkPrintServerQueues()
+        => Marco.Core.Printing.PrintServerQueueLinker.Link(Machines.ToList());
 
     private bool CanOpenScan() => !IsRunning;
 

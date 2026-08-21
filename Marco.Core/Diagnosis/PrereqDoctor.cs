@@ -15,6 +15,8 @@ public enum PrereqCause
     SshAuthFailed,
     SshUnreachable,
     NotInventoryable,
+    SnmpDisabled,
+    SnmpNoResponse,
     Unknown,
 }
 
@@ -37,20 +39,39 @@ public static class PrereqDoctor
 {
     public static PrereqDiagnosis Diagnose(Machine m)
     {
-        // Printers/network devices are skipped by design, not broken.
-        if (m.DeviceType is DeviceType.Printer or DeviceType.NetworkDevice && m.Collectors.Count == 0)
-            return new(PrereqCause.NotInventoryable, "Not inventoried by design",
-                "Printers and network devices have no WMI/SSH inventory story; use 'Inventory selected' to try anyway.",
+        bool snmpDevice = m.DeviceType is DeviceType.Printer or DeviceType.NetworkDevice;
+
+        // Printers/network devices that were never attempted (e.g. a scan from a version without SNMP support).
+        if (snmpDevice && m.Collectors.Count == 0 && m.ConnectFailure == ConnectFailure.None)
+            return new(PrereqCause.NotInventoryable, "Not inventoried yet",
+                "Printers and network devices are read over SNMP (and printers over IPP); run inventory to collect them.",
                 null, Confident: true);
 
         switch (m.ConnectFailure)
         {
             case ConnectFailure.NoCredentials:
                 return new(PrereqCause.NoCredentials, "No matching credentials",
-                    m.DeviceType == DeviceType.UnixLinux
-                        ? "No Linux/SSH credential set is configured; add one in the Credentials panel."
-                        : "No Windows credential set applies to this host; add one in the Credentials panel.",
+                    snmpDevice
+                        ? "No SNMP community string applies to this device; add an SNMP credential in the Credentials panel."
+                        : m.DeviceType == DeviceType.UnixLinux
+                            ? "No Linux/SSH credential set is configured; add one in the Credentials panel."
+                            : "No Windows credential set applies to this host; add one in the Credentials panel.",
                     null, Confident: true);
+
+            case ConnectFailure.SnmpDisabled:
+                return new(PrereqCause.SnmpDisabled, "SNMP is switched off on the device",
+                    "The device answered UDP 161 with 'port unreachable', so no SNMP agent is listening. Enable SNMP "
+                    + "v1/v2c (read-only) in the device's web admin page — usually under Network → SNMP — and set a "
+                    + "read community. Newer HP FutureSmart firmware ships with v1/v2c disabled by default.",
+                    PrereqFixes.SnmpEnable, Confident: true);
+
+            case ConnectFailure.SnmpNoResponse:
+                return new(PrereqCause.SnmpNoResponse, "No SNMP response",
+                    "Nothing answered over SNMP v1/v2c. A wrong community string gets no reply at all, so this is "
+                    + "either the community (add the site's read community as an SNMP credential), SNMP disabled on the "
+                    + "device, or UDP 161 filtered between here and the device"
+                    + (m.DeviceType == DeviceType.Printer ? " — and IPP on port 631 did not answer either." : "."),
+                    PrereqFixes.SnmpEnable, Confident: false);
 
             case ConnectFailure.Timeout:
                 // 135 answered but the session timed out: WAN/VPN latency or an overloaded target, not a block.

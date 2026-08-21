@@ -26,11 +26,49 @@ public sealed class CredentialVerifier
 {
     private readonly IWmiSessionFactory _factory;
     private readonly ISshSessionFactory? _ssh;
+    private readonly Marco.Core.Snmp.ISnmpSessionFactory? _snmp;
 
-    public CredentialVerifier(IWmiSessionFactory factory, ISshSessionFactory? ssh = null)
+    public CredentialVerifier(IWmiSessionFactory factory, ISshSessionFactory? ssh = null, Marco.Core.Snmp.ISnmpSessionFactory? snmp = null)
     {
         _factory = factory;
         _ssh = ssh;
+        _snmp = snmp;
+    }
+
+    /// <summary>Verify an SNMP community string by probing the device's system group — the same exchange the
+    /// printer/network-device runner opens with, so a green result means inventory will read it.</summary>
+    public async Task<VerifyResult> VerifySnmpHostAsync(CredentialSet set, string host, CancellationToken ct)
+    {
+        if (_snmp is null) return new VerifyResult(VerifyOutcome.Error, "SNMP verification is unavailable.");
+        if (string.IsNullOrWhiteSpace(host)) return new VerifyResult(VerifyOutcome.Error, "Enter a host to test against.");
+        var community = set.Password is null ? "" : new NetworkCredential(string.Empty, set.Password).Password;
+        if (community.Length == 0) return new VerifyResult(VerifyOutcome.Error, "A community string is required.");
+        try
+        {
+            var r = await Marco.Core.Snmp.SnmpProbe.ProbeAsync(_snmp, host.Trim(), 161, community, set.SnmpVersion,
+                new Marco.Core.Snmp.SnmpOptions(TimeoutMs: 2500, Retries: 1), ct).ConfigureAwait(false);
+            if (r is null)
+                return new VerifyResult(VerifyOutcome.BadCredentials,
+                    $"No SNMP response from {host}.",
+                    "SNMP drops requests with a wrong community string silently, so this is either a wrong community, SNMP v1/v2c disabled on the device, or a firewall. Check the device's web admin page under Network → SNMP.");
+            var ver = r.Version == Marco.Core.Snmp.SnmpVersion.V1 ? "v1" : "v2c";
+            var descr = r.Description;
+            return new VerifyResult(VerifyOutcome.Success,
+                descr is { Length: > 0 } ? $"Responded over SNMP {ver}: {(descr.Length > 90 ? descr[..90] + "…" : descr)}" : $"Responded over SNMP {ver}.");
+        }
+        catch (OperationCanceledException)
+        {
+            return new VerifyResult(VerifyOutcome.Error, "Verification cancelled or timed out.");
+        }
+        catch (Marco.Core.Snmp.SnmpException ex) when (ex.Kind == Marco.Core.Snmp.SnmpFailureKind.PortUnreachable)
+        {
+            return new VerifyResult(VerifyOutcome.Unreachable, $"{host} refuses UDP 161 — SNMP is switched off on the device.",
+                "Enable SNMP v1/v2c (read-only) in the device's web admin page, typically under Network → SNMP.");
+        }
+        catch (Exception ex)
+        {
+            return new VerifyResult(VerifyOutcome.Error, $"SNMP: {ex.Message}");
+        }
     }
 
     /// <summary>Verify a Linux credential by opening a real SSH session and running a trivial command. Uses the

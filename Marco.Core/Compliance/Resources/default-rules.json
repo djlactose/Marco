@@ -26,6 +26,8 @@
     { "Id": "defender-realtime", "Name": "Defender real-time protection", "Description": "When Defender is the active antivirus, real-time protection is on.", "Severity": "Low", "Check": "defender-realtime", "AppliesTo": { "Os": "windows" } },
     { "Id": "defender-tamper-protection", "Name": "Defender tamper protection", "Description": "When Defender is the active antivirus, tamper protection is on.", "Severity": "Low", "Check": "defender-tamper-protection", "AppliesTo": { "Os": "windows" } },
     { "Id": "admins-limited", "Name": "Local Administrators limited", "Description": "The local Administrators group has no more members than the threshold.", "Severity": "Low", "Check": "admins-limited", "Params": { "maxAdmins": 5 }, "AppliesTo": { "Os": "windows" } },
-    { "Id": "defender-scan-recent", "Name": "Defender scanned recently", "Description": "A Defender quick scan ran within the threshold.", "Severity": "Low", "Check": "defender-scan-recent", "Params": { "maxDays": 14 }, "AppliesTo": { "Os": "windows" } }
+    { "Id": "defender-scan-recent", "Name": "Defender scanned recently", "Description": "A Defender quick scan ran within the threshold.", "Severity": "Low", "Check": "defender-scan-recent", "Params": { "maxDays": 14 }, "AppliesTo": { "Os": "windows" } },
+    { "Id": "printer-no-error-state", "Name": "Printer has no blocking error", "Description": "The printer reports no jam, open door, empty toner, missing supply or offline/down condition (SNMP Printer MIB / IPP).", "Severity": "High", "Check": "printer-no-error-state", "AppliesTo": { "Os": "printer" } },
+    { "Id": "printer-supplies-not-low", "Name": "Printer supplies above threshold", "Description": "No toner / ink / drum is at or below the threshold, and no waste container is nearly full.", "Severity": "Medium", "Check": "printer-supplies-not-low", "Params": { "minPercent": 10 }, "AppliesTo": { "Os": "printer" } }
   ]
 }

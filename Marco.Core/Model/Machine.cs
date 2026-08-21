@@ -185,6 +185,50 @@ public sealed class Machine : ObservableBase
     /// <summary>Hottest ACPI thermal zone, when the firmware exposes one over WMI (rare on desktops).</summary>
     public int? ThermalTempC { get => _thermalTempC; set => Set(ref _thermalTempC, value); }
 
+    // --- Printers and network devices (SNMP / IPP runner) ---
+    private PrinterDevice? _printer;
+    private NetworkDeviceInfo? _networkDevice;
+    private List<PrintServerQueue> _printServerQueues = new();
+    /// <summary>Device-side printer inventory (supplies, status, counters, queue); null unless the host was
+    /// inventoried as a printer. Distinct from <see cref="Printers"/>, the print queues on a Windows host.</summary>
+    public PrinterDevice? Printer
+    {
+        get => _printer;
+        set { if (Set(ref _printer, value)) { Raise(nameof(PrinterSummary)); Raise(nameof(PrinterLowSupplyCount)); Raise(nameof(PrinterHasLowSupplies)); } }
+    }
+    /// <summary>Generic SNMP system facts for switches / APs / NAS; null unless inventoried as network gear.</summary>
+    public NetworkDeviceInfo? NetworkDevice { get => _networkDevice; set => Set(ref _networkDevice, value); }
+    /// <summary>Windows print queues elsewhere in the scan that point at this printer — derived after each run by
+    /// <c>PrintServerQueueLinker</c>; transient (never serialized).</summary>
+    public List<PrintServerQueue> PrintServerQueues
+    {
+        get => _printServerQueues;
+        set { _printServerQueues = value ?? new(); Raise(nameof(PrintServerQueues)); Raise(nameof(PrinterSummary)); }
+    }
+
+    /// <summary>Supplies at/below the low threshold — drives the highlight on the grid's Printer column.</summary>
+    public int PrinterLowSupplyCount => _printer?.LowSupplyCount ?? 0;
+    public bool PrinterHasLowSupplies => PrinterLowSupplyCount > 0;
+
+    /// <summary>"Idle · K 12% · C 80% · 45,210 pages · 3 queued" for the grid's Printer column; null when the
+    /// host has no printer inventory.</summary>
+    public string? PrinterSummary
+    {
+        get
+        {
+            if (_printer is not { } p) return null;
+            var parts = new List<string>();
+            if (p.Status is { Length: > 0 } st) parts.Add(st);
+            foreach (var e in p.ErrorStates) parts.Add(e);
+            if (p.SuppliesSummary is { } sup) parts.Add(sup);
+            else if (p.Supplies.Count > 0) parts.Add($"{p.Supplies.Count} supplies");
+            if (p.TotalPages is { } pages) parts.Add($"{pages:N0} pages");
+            int queued = (p.QueuedJobs ?? 0) + _printServerQueues.Sum(q => q.QueuedJobs ?? 0);
+            if (queued > 0) parts.Add($"{queued} queued");
+            return parts.Count == 0 ? "Printer" : string.Join(" · ", parts);
+        }
+    }
+
     // --- Memory summary (filled by the memory collector) ---
     private long _totalMemoryBytes;
     private int _memorySlotsUsed;

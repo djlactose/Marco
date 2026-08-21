@@ -205,7 +205,7 @@
             <Separator Margin="0,14" />
 
             <TextBlock Text="Credentials (for inventory)" Style="{StaticResource SectionHeader}" />
-            <TextBlock Text="Matched to each host's type (WMI or SSH) and tried in order; the first that authenticates is remembered. None = current session token (Windows hosts only)."
+            <TextBlock Text="Matched to each host's type (WMI, SSH or SNMP) and tried in order; the first that authenticates is remembered. None = current session token (Windows) and the 'public' community (printers / network devices)."
                        TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,0,0,6" />
             <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Background="White" MinHeight="60" MaxHeight="120">
               <ListBox ItemsSource="{Binding Credentials}" BorderThickness="0"
@@ -566,6 +566,24 @@
             <DataGridTextColumn Header="Antivirus" Binding="{Binding AntivirusSummary}" Width="160" />
             <DataGridTextColumn Header="Compliance" Binding="{Binding ComplianceDisplay}" Width="105" />
             <DataGridTextColumn Header="OS EOL" Binding="{Binding LifecycleDisplay}" Width="85" />
+            <DataGridTextColumn Header="Printer" Binding="{Binding PrinterSummary}" Width="230">
+              <DataGridTextColumn.ElementStyle>
+                <Style TargetType="TextBlock">
+                  <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                  <Setter Property="ToolTip" Value="{Binding PrinterSummary}" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding PrinterHasLowSupplies}" Value="True">
+                      <Setter Property="Foreground" Value="#B9770E" />
+                      <Setter Property="FontWeight" Value="SemiBold" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding Printer.HasErrorCondition}" Value="True">
+                      <Setter Property="Foreground" Value="Firebrick" />
+                      <Setter Property="FontWeight" Value="SemiBold" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </DataGridTextColumn.ElementStyle>
+            </DataGridTextColumn>
             <DataGridTextColumn Header="RAM"
                                 Binding="{Binding TotalMemoryBytes, Converter={StaticResource BytesToGb}}" Width="70" />
             <DataGridTextColumn Header="CPUs" Binding="{Binding CpuCount}" Width="55" />

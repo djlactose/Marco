@@ -25,6 +25,21 @@ public sealed class CredentialSet : IDisposable
     /// <summary>SSH port for Linux credentials.</summary>
     public int SshPort { get; set; } = 22;
 
+    /// <summary>For SNMP credentials: the version to use, or null to try v2c and v1. The community string lives
+    /// in <see cref="Password"/> (DPAPI-protected like any other secret); Domain/Username are unused.</summary>
+    public Marco.Core.Snmp.SnmpVersion? SnmpVersion { get; set; }
+
+    public const string SnmpDefaultLabel = "SNMP default (public)";
+
+    /// <summary>The read-only "public" community every printer ships with — seeded as a visible, deletable entry
+    /// on first run so the run log shows exactly what was tried and the operator can remove it.</summary>
+    public static CredentialSet SnmpDefault()
+    {
+        var set = new CredentialSet(SnmpDefaultLabel, null, null, null) { Kind = CredentialKind.Snmp };
+        set.SetPassword("public");
+        return set;
+    }
+
     /// <summary>Client profile this credential belongs to; null = shared (tried for every client). Scans scope
     /// candidates to the active client's sets plus the shared ones — another client's credentials are never
     /// sprayed at this client's network.</summary>
@@ -46,7 +61,7 @@ public sealed class CredentialSet : IDisposable
         ? WmiCredential.CurrentToken
         : new WmiCredential { Domain = Domain, Username = Username, Password = Password };
 
-    public CredentialCandidate ToCandidate() => new(Label, ToWmiCredential(), Kind, SshPort);
+    public CredentialCandidate ToCandidate() => new(Label, ToWmiCredential(), Kind, SshPort, SnmpVersion);
 
     /// <summary>Set/replace the password from a transient plaintext string (e.g. unpacked from the Windows
     /// credential dialog), copying into a SecureString and leaving the caller to clear the plaintext.</summary>
