@@ -216,7 +216,38 @@ public partial class MainViewModel
         SaveSettings();
         _ = RefreshHistoryAsync();
         EvaluateBaseline();
-        StatusLine = $"Saved current settings as client '{name}'.";
+
+        int adopted = AdoptSharedLoginsInto(created.Id);
+        StatusLine = adopted > 0
+            ? $"Saved current settings and {adopted} login(s) as client '{name}'."
+            : $"Saved current settings as client '{name}'.";
+    }
+
+    /// <summary>Offer to reassign the shared (unassigned) logins to the new client, so promoting a working
+    /// context into a client also takes the logins it was using. Shared credentials otherwise apply to every
+    /// client, so this is a deliberate, confirmed narrowing. Skipped while a scan is running (mutating a
+    /// credential a connect may be using is unsafe). Returns how many were reassigned.</summary>
+    private int AdoptSharedLoginsInto(string clientId)
+    {
+        if (IsRunning) return 0;
+        int sharedCount = _credentials.Sets.Count(s => s.ClientId is null);
+        if (sharedCount == 0) return 0;
+
+        var answer = MessageBox.Show(
+            $"Assign your {sharedCount} shared login(s) to this client too?\n\n"
+            + "They will then be tried only when this client is selected — right now they apply to every client.",
+            "Assign logins", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (answer != MessageBoxResult.Yes) return 0;
+
+        SyncCredentialsFromDisk(); // pick up another window's edits before we retag + save
+        var shared = _credentials.Sets.Where(s => s.ClientId is null).ToList();
+        foreach (var set in shared) set.ClientId = clientId;
+        SaveCredentials();
+
+        Credentials.Clear();
+        foreach (var set in _credentials.Sets)
+            Credentials.Add(new CredentialDisplay(set));
+        return shared.Count;
     }
 
     [RelayCommand]
